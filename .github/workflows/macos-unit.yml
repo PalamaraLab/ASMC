@@ -1,0 +1,54 @@
+name: "Unit tests: macOS"
+
+on:
+  push:
+    branches:
+      - zzz_master
+
+jobs:
+
+  build-and-test:
+    name: Unit tests on macOS
+    runs-on: macos-latest
+    if:  ${{ github.repository == 'PalamaraLab/FastSMC' }}
+
+    steps:
+
+      - name: set xcode version
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: checkout repo & submodules
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: cache vcpkg installed packages
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: |
+            vcpkg/
+            build_dir/vcpkg_installed/
+          key: ${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg/CHANGELOG.md') }}
+
+      - name: install dependencies
+        run: |
+          brew install libomp
+
+      - name: make build directory
+        run: mkdir build_dir
+        if: steps.cache.outputs.cache-hit != 'true'
+
+      - name: cmake configure
+        run: cmake ..
+        working-directory: build_dir
+
+      - name: cmake build
+        run: cmake --build . --parallel 2 --target ASMC_unit_tests
+        working-directory: build_dir
+
+      - name: cmake test
+        run: ctest -j2 -R Asmc_unit_tests --output-on-failure
+        working-directory: build_dir

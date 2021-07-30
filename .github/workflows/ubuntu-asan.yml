@@ -1,0 +1,50 @@
+name: Ubuntu asan
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+
+  build-and-test:
+    name: Unit tests with address sanitizer on Ubuntu
+    runs-on: ubuntu-20.04
+    env:
+      CXX: clang++-10
+    if: ${{ github.event_name == 'pull_request' || github.repository == 'PalamaraLab/FastSMC' }}
+
+    steps:
+
+      - name: checkout repo & submodules
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: cache vcpkg installed packages
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: |
+            vcpkg/
+            build_dir/vcpkg_installed/
+          key: ${{ runner.os }}-${{ env.CXX }}-${{ hashFiles('vcpkg.json', 'vcpkg/CHANGELOG.md') }}
+
+      - name: make build directory
+        run: mkdir build_dir
+        if: steps.cache.outputs.cache-hit != 'true'
+
+      - name: cmake configure
+        run: cmake .. -DASMC_MEMCHECK:BOOL=TRUE
+        working-directory: build_dir
+
+      - name: cmake build
+        run: cmake --build . --parallel 2 --target ASMC_unit_tests
+        working-directory: build_dir
+
+      - name: cmake test
+        run: ctest -j2 -R Asmc_unit_tests --output-on-failure
+        working-directory: build_dir

@@ -1,0 +1,10 @@
+---
+BasedOnStyle: LLVM
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+ColumnLimit: 120
+BreakBeforeBraces: Linux
+PointerAlignment: Left
+
+...

@@ -1,0 +1,61 @@
+name: PyPI
+
+on:
+  push:
+    branches:
+      - stable
+
+env:
+  CIBW_BUILD: cp36-* cp37-* cp38-* cp39-*
+  CIBW_ARCHS: auto64
+  CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+  CIBW_BEFORE_BUILD: pip install --upgrade pip setuptools wheel ninja numpy cython
+  MACOSX_DEPLOYMENT_TARGET: 10.15
+
+
+
+
+jobs:
+  build-wheels:
+    runs-on: ${{ matrix.os }}
+    if:  ${{ github.repository == 'PalamaraLab/FastSMC' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-20.04, macos-latest]
+
+    steps:
+
+      - name: checkout repo & submodules
+        uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - name: Build wheels
+        uses: joerick/cibuildwheel@v1.10.0
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: wheels
+          path: ./wheelhouse/*.whl
+
+
+  upload_all:
+    name: Upload wheels to PyPI
+    needs: build-wheels
+    runs-on: ubuntu-latest
+    if:  ${{ github.repository == 'PalamaraLab/FastSMC' }}
+
+    steps:
+      - uses: actions/setup-python@v2
+
+      - name: Download wheels
+        uses: actions/download-artifact@v1
+        with:
+          name: wheels
+
+      - uses: pypa/gh-action-pypi-publish@v1.4.2
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_TOKEN }}
+          packages_dir: wheels/
