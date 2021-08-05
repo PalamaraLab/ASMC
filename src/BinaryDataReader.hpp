@@ -7,13 +7,19 @@
 
 #include <zlib.h>
 
+#include <fmt/format.h>
+
 #include <array>
 #include <cstdint>
+#include <exception>
+#include <filesystem>
 #include <iomanip>
 #include <limits>
 #include <sstream>
 #include <string>
 #include <vector>
+
+namespace fs = std::filesystem;
 
 struct IbdPairDataLine {
 
@@ -35,7 +41,7 @@ struct IbdPairDataLine {
   float postEst = -1.f;
   float mapEst = -1.f;
 
-  std::string toString()
+  [[nodiscard]] std::string toString() const
   {
     std::stringstream line;
     line << std::setprecision(std::numeric_limits<float>::digits10 + 1);
@@ -120,6 +126,11 @@ private:
 public:
   explicit BinaryDataReader(const std::string& binaryFile)
   {
+
+    if (!fs::is_regular_file(binaryFile)) {
+      throw std::runtime_error(fmt::format("Provided path to binary file {} is not a file\n", binaryFile));
+    }
+
     mGzBinaryFileHandle = gzopen(binaryFile.c_str(), "rb");
     ReadHeader();
     CheckIfNextLineExists();
@@ -173,7 +184,7 @@ public:
     return line;
   }
 
-  bool moreLinesInFile() const
+  [[nodiscard]] bool moreLinesInFile() const
   {
     return mMoreLinesInFile;
   }

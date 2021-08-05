@@ -320,6 +320,9 @@ void HMM::decodeAll(int jobs, int jobInd)
   uint64 pairsEnd = totPairs * jobInd / jobs;
   uint64 totPairsJob = pairsEnd - pairsStart;
 
+  fmt::print("jobInd: {}   jobs: {}\n", jobInd, jobs);
+  fmt::print("pairsStart: {}   pairsEnd: {}   totPairsJob: {}\n", pairsStart, pairsEnd, totPairsJob);
+
   // alloc
   m_observationsBatch.clear();
   for (uint i = 0; i < individuals.size(); i++) {
@@ -358,7 +361,7 @@ void HMM::decodeAll(int jobs, int jobInd)
     uint64 percentage = 100 * pairsJob / totPairsJob;
     if (percentage != lastPercentage) {
       cout << "\rDecoding progress: " << percentage << "%"
-           << "  (" << pairsJob << "/" << totPairsJob << ")" << flush;
+           << "  (" << pairsJob << "/" << totPairsJob << ")### " << N << " ### " << totPairs << flush;
     }
     lastPercentage = percentage;
   }
@@ -1791,4 +1794,28 @@ void HMM::setStoreSumOfPosterior(bool storeSumOfPosterior)
 {
   m_storeSumOfPosterior = storeSumOfPosterior;
   updateOutputStructures();
+}
+bool HMM::getStorePerPairPosteriorMean() const
+{
+  return m_storePerPairPosteriorMean;
+}
+bool HMM::getWritePerPairPosteriorMean() const
+{
+  return m_writePerPairPosteriorMean;
+}
+bool HMM::getStorePerPairMap() const
+{
+  return m_storePerPairMAP;
+}
+bool HMM::getWritePerPairMap() const
+{
+  return m_writePerPairMAP;
+}
+bool HMM::getStorePerPairPosterior() const
+{
+  return m_storePerPairPosterior;
+}
+bool HMM::getStoreSumOfPosterior() const
+{
+  return m_storeSumOfPosterior;
 }

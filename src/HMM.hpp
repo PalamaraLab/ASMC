@@ -298,6 +298,13 @@ public:
   /// Set to true to store the sum of posteriors
   void setStoreSumOfPosterior(bool storeSumOfPosterior = true);
 
+  bool getStorePerPairPosteriorMean() const;
+  bool getWritePerPairPosteriorMean() const;
+  bool getStorePerPairMap() const;
+  bool getWritePerPairMap() const;
+  bool getStorePerPairPosterior() const;
+  bool getStoreSumOfPosterior() const;
+
 private:
   void writeBinaryInfoIntoFile();
 

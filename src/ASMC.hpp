@@ -55,17 +55,34 @@ public:
 
   DecodingReturnValues decodeAllInJob();
 
-  void decodePairs(const std::vector<unsigned long>& hapIndicesA, const std::vector<unsigned long>& hapIndicesB,
-                   bool perPairPosteriors = false, bool sumOfPosteriors = false, bool perPairPosteriorMeans = false,
-                   bool perPairMAPs = false);
+  void decodePairs();
 
-  void decodePairs(const std::vector<std::string>& hapIdsA, const std::vector<std::string>& hapIdsB,
-                   bool perPairPosteriors = false, bool sumOfPosteriors = false, bool perPairPosteriorMeans = false,
-                   bool perPairMAPs = false);
+  void decodePairs(const std::vector<unsigned long>& hapIndicesA, const std::vector<unsigned long>& hapIndicesB);
+
+  void decodePairs(const std::vector<std::string>& hapIdsA, const std::vector<std::string>& hapIdsB);
 
   DecodePairsReturnStruct getCopyOfResults();
 
   const DecodePairsReturnStruct& getRefOfResults();
+
+  /// Set to true to store per pair posterior mean
+  void setStorePerPairPosteriorMean(bool storePerPairPosteriorMean = true);
+
+  /// Set to true to write per pair posterior mean to file
+  void setWritePerPairPosteriorMean(bool writePerPairPosteriorMean = true);
+
+  /// Set to true to store per pair MAP
+  void setStorePerPairMap(bool storePerPairMAP = true);
+
+  /// Set to true to write per pair MAP to file
+  void setWritePerPairMap(bool writePerPairMAP = true);
+
+  /// Set to true to store per pair posterior
+  void setStorePerPairPosterior(bool storePerPairPosterior = true);
+
+  /// Set to true to store the sum of posteriors
+  void setStoreSumOfPosterior(bool storeSumOfPosterior = true);
+
 };
 } // namespace ASMC
 

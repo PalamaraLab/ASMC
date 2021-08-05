@@ -77,9 +77,32 @@ DecodingReturnValues ASMC::ASMC::decodeAllInJob()
   return mHmm.getDecodingReturnValues();
 }
 
+void ASMC::ASMC::decodePairs()
+{
+  const unsigned long numInd = mData.individuals.size();
+  const unsigned long numHap = 2ul * numInd;
+  const unsigned long numPairs = 2ul * numInd * numInd - numInd;
+
+  std::vector<unsigned long> hapIndicesA;
+  hapIndicesA.reserve(numPairs);
+
+  std::vector<unsigned long> hapIndicesB;
+  hapIndicesB.reserve(numPairs);
+
+  for (auto indA = 0ul; indA < numHap; ++indA) {
+    for (auto indB = 0ul; indB < indA; ++indB) {
+      hapIndicesA.push_back(indA);
+      hapIndicesB.push_back(indB);
+    }
+  }
+
+  assert(numPairs == hapIndicesA.size());
+
+  decodePairs(hapIndicesA, hapIndicesB);
+}
+
 void ASMC::ASMC::decodePairs(const std::vector<unsigned long>& hapIndicesA,
-                             const std::vector<unsigned long>& hapIndicesB, bool perPairPosteriors,
-                             bool sumOfPosteriors, bool perPairPosteriorMeans, bool perPairMAPs)
+                             const std::vector<unsigned long>& hapIndicesB)
 {
   if (hapIndicesA.empty() || hapIndicesA.size() != hapIndicesB.size()) {
     throw std::runtime_error(
@@ -87,20 +110,15 @@ void ASMC::ASMC::decodePairs(const std::vector<unsigned long>& hapIndicesA,
                     hapIndicesB.size()));
   }
 
-  mHmm.getDecodePairsReturnStruct().initialise(hapIndicesA, hapIndicesB, mData.sites,
-                                               mHmm.getDecodingQuantities().states, perPairPosteriors, sumOfPosteriors,
-                                               perPairPosteriorMeans, perPairMAPs);
-  mHmm.setStorePerPairPosteriorMean(perPairPosteriorMeans);
-  mHmm.setStorePerPairMap(perPairMAPs);
-  mHmm.setStorePerPairPosterior(perPairPosteriors);
-  mHmm.setStoreSumOfPosterior(sumOfPosteriors);
+  mHmm.getDecodePairsReturnStruct().initialise(
+      hapIndicesA, hapIndicesB, mData.sites, mHmm.getDecodingQuantities().states, mHmm.getStorePerPairPosterior(),
+      mHmm.getStoreSumOfPosterior(), mHmm.getStorePerPairPosteriorMean(), mHmm.getStorePerPairMap());
   mHmm.decodeHapPairs(hapIndicesA, hapIndicesB);
   mHmm.finishDecoding();
   mHmm.getDecodePairsReturnStruct().finaliseCalculations();
 }
 
-void ASMC::ASMC::decodePairs(const std::vector<std::string>& hapIdsA, const std::vector<std::string>& hapIdsB,
-                             bool perPairPosteriors, bool sumOfPosteriors, bool perPairPosteriorMeans, bool perPairMAPs)
+void ASMC::ASMC::decodePairs(const std::vector<std::string>& hapIdsA, const std::vector<std::string>& hapIdsB)
 {
   if (hapIdsA.size() != hapIdsB.size()) {
     throw std::runtime_error(fmt::format("Vector of A IDs ({}) must be the same size as vector of B IDs ({}).\n",
@@ -124,7 +142,7 @@ void ASMC::ASMC::decodePairs(const std::vector<std::string>& hapIdsA, const std:
     hapsIndicesB.at(i) = asmc::dipToHapId(indIdB, hapB);
   }
 
-  decodePairs(hapsIndicesA, hapsIndicesB, perPairPosteriors, sumOfPosteriors, perPairPosteriorMeans, perPairMAPs);
+  decodePairs(hapsIndicesA, hapsIndicesB);
 }
 
 DecodePairsReturnStruct ASMC::ASMC::getCopyOfResults()
@@ -135,4 +153,34 @@ DecodePairsReturnStruct ASMC::ASMC::getCopyOfResults()
 const DecodePairsReturnStruct& ASMC::ASMC::getRefOfResults()
 {
   return mHmm.getDecodePairsReturnStruct();
+}
+
+void ASMC::ASMC::setStorePerPairPosteriorMean(bool storePerPairPosteriorMean)
+{
+  mHmm.setStorePerPairPosteriorMean(storePerPairPosteriorMean);
+}
+
+void ASMC::ASMC::setWritePerPairPosteriorMean(bool writePerPairPosteriorMean)
+{
+  mHmm.setWritePerPairPosteriorMean(writePerPairPosteriorMean);
+}
+
+void ASMC::ASMC::setStorePerPairMap(bool storePerPairMAP)
+{
+  mHmm.setStorePerPairMap(storePerPairMAP);
+}
+
+void ASMC::ASMC::setWritePerPairMap(bool writePerPairMAP)
+{
+  mHmm.setWritePerPairMap(writePerPairMAP);
+}
+
+void ASMC::ASMC::setStorePerPairPosterior(bool storePerPairPosterior)
+{
+  mHmm.setStorePerPairPosterior(storePerPairPosterior);
+}
+
+void ASMC::ASMC::setStoreSumOfPosterior(bool storeSumOfPosterior)
+{
+  mHmm.setStoreSumOfPosterior(storeSumOfPosterior);
 }
