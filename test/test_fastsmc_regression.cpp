@@ -15,25 +15,21 @@
 
 #include "catch.hpp"
 
-#include <iostream>
 #include <string>
 #include <vector>
 
-#include "Data.hpp"
 #include "DecodingParams.hpp"
-#include "DecodingQuantities.hpp"
 #include "FastSMC.hpp"
 #include "FileUtils.hpp"
-#include "HMM.hpp"
 #include "Timer.hpp"
 
 
 
-TEST_CASE("test FastSMC + hashing regression test", "[FastSMC_regression]")
+TEST_CASE("test FastSMC with hashing regression test", "[FastSMC_regression]")
 {
   DecodingParams params;
-  params.decodingQuantFile = ASMC_FILE_DIR "/FASTSMC_EXAMPLE/example.decodingQuantities.gz";
-  params.inFileRoot = ASMC_FILE_DIR "/FASTSMC_EXAMPLE/example";
+  params.decodingQuantFile = ASMC_DATA_DIR "/decoding_quantities/10-20-2000_CEU.decodingQuantities.gz";
+  params.inFileRoot = ASMC_DATA_DIR "/examples/fastsmc/example";
   params.outFileRoot = "/tmp/FastSMCresults";
   params.decodingModeString = "array";
   params.foldData = true;
@@ -58,14 +54,14 @@ TEST_CASE("test FastSMC + hashing regression test", "[FastSMC_regression]")
 
   SECTION("regression test")
   {
-    const auto expectedNumLines = 1524ul;
+    const auto expectedNumLines = 1574ul;
 
     // Read lines from existing regression test output into a vector of strings
     std::vector<std::string> regressionLines;
     regressionLines.reserve(expectedNumLines);
     {
       FileUtils::AutoGzIfstream fin_regression;
-      fin_regression.openOrExit(ASMC_FILE_DIR "/FASTSMC_EXAMPLE/regression_output.ibd.gz");
+      fin_regression.openOrExit(ASMC_DATA_DIR "/testing/fastsmc/regression/regression_output.ibd.gz");
       for (std::string f_line; getline(fin_regression, f_line);) {
         regressionLines.emplace_back(f_line);
       }
@@ -97,8 +93,8 @@ TEST_CASE("test FastSMC + hashing regression test", "[FastSMC_regression]")
 TEST_CASE("test FastSMC without hashing regression test", "[FastSMC_regression]")
 {
   DecodingParams params;
-  params.decodingQuantFile = ASMC_FILE_DIR "/FASTSMC_EXAMPLE/example.decodingQuantities.gz";
-  params.inFileRoot = ASMC_FILE_DIR "/FASTSMC_EXAMPLE/example";
+  params.decodingQuantFile = ASMC_DATA_DIR "/decoding_quantities/10-20-2000_CEU.decodingQuantities.gz";
+  params.inFileRoot = ASMC_DATA_DIR "/examples/fastsmc/example";
   params.outFileRoot = "/tmp/FastSMCresults";
   params.decodingModeString = "array";
   params.foldData = true;
@@ -115,7 +111,7 @@ TEST_CASE("test FastSMC without hashing regression test", "[FastSMC_regression]"
   params.doPerPairMAP = true;
   params.doPerPairPosteriorMean = true;
   params.jobInd = 7;
-  params.jobs = 9;
+  params.jobs = 25;
   params.useKnownSeed = true;
 
   assert(params.validateParamsFastSMC());
@@ -125,14 +121,14 @@ TEST_CASE("test FastSMC without hashing regression test", "[FastSMC_regression]"
 
   SECTION("regression test")
   {
-    const auto expectedNumLines = 2986ul;
+    const auto expectedNumLines = 498ul;
 
     // Read lines from existing regression test output into a vector of strings
     std::vector<std::string> regressionLines;
     regressionLines.reserve(expectedNumLines);
     {
       FileUtils::AutoGzIfstream fin_regression;
-      fin_regression.openOrExit(ASMC_FILE_DIR "/FASTSMC_EXAMPLE/regression_output_no_hashing.ibd.gz");
+      fin_regression.openOrExit(ASMC_DATA_DIR "/testing/fastsmc/regression/regression_output_no_hashing.ibd.gz");
       for (std::string f_line; getline(fin_regression, f_line);) {
         regressionLines.emplace_back(f_line);
       }
@@ -144,7 +140,7 @@ TEST_CASE("test FastSMC without hashing regression test", "[FastSMC_regression]"
     generatedLines.reserve(expectedNumLines);
     {
       FileUtils::AutoGzIfstream fin_generated;
-      fin_generated.openOrExit(params.outFileRoot + ".7.9.FastSMC.ibd.gz");
+      fin_generated.openOrExit(params.outFileRoot + ".7.25.FastSMC.ibd.gz");
       for (std::string f_line; getline(fin_generated, f_line);) {
         generatedLines.emplace_back(f_line);
       }
