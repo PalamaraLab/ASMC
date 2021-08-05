@@ -237,11 +237,11 @@ PYBIND11_MODULE(asmc_python_bindings, m)
       .def("get_copy_of_results", &ASMC::ASMC::getCopyOfResults, py::return_value_policy::copy)
       .def("get_ref_of_results", &ASMC::ASMC::getRefOfResults, py::return_value_policy::reference_internal)
       .def("set_store_per_pair_posterior_mean", &ASMC::ASMC::setStorePerPairPosteriorMean,
-           "store_per_pair_posterior_mean"_a = false)
+           "store_per_pair_posterior_mean"_a = true)
       .def("set_write_per_pair_posterior_mean", &ASMC::ASMC::setWritePerPairPosteriorMean,
-           "write_per_pair_posterior_mean"_a = false)
-      .def("set_store_per_pair_map", &ASMC::ASMC::setStorePerPairMap, "store_per_pair_map"_a = false)
-      .def("set_write_per_pair_map", &ASMC::ASMC::setWritePerPairMap, "write_per_pair_map"_a = false)
-      .def("set_store_per_pair_posterior", &ASMC::ASMC::setStorePerPairPosterior, "store_per_pair_posterior"_a = false)
-      .def("set_store_sum_of_posterior", &ASMC::ASMC::setStoreSumOfPosterior, "store_sum_of_posterior"_a = false);
+           "write_per_pair_posterior_mean"_a = true)
+      .def("set_store_per_pair_map", &ASMC::ASMC::setStorePerPairMap, "store_per_pair_map"_a = true)
+      .def("set_write_per_pair_map", &ASMC::ASMC::setWritePerPairMap, "write_per_pair_map"_a = true)
+      .def("set_store_per_pair_posterior", &ASMC::ASMC::setStorePerPairPosterior, "store_per_pair_posterior"_a = true)
+      .def("set_store_sum_of_posterior", &ASMC::ASMC::setStoreSumOfPosterior, "store_sum_of_posterior"_a = true);
 }
