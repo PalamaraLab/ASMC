@@ -26,40 +26,45 @@
 
 TEST_CASE("test ASMC decodeAllInJob", "[ASMC]")
 {
-  DecodingParams params(ASMC_FILE_DIR "/EXAMPLE/exampleFile.n300.array",
-                        ASMC_FILE_DIR "/DECODING_QUANTITIES/30-100-2000.decodingQuantities.gz");
+  DecodingParams params(ASMC_DATA_DIR "/examples/asmc/exampleFile.n300.array",
+                        ASMC_DATA_DIR "/decoding_quantities/30-100-2000_CEU.decodingQuantities.gz");
 
   ASMC::ASMC asmc(params);
 
-//  auto result = asmc.decodeAllInJob();
-//
-//  SECTION("test decode pair summarize")
-//  {
-//    REQUIRE(result.sumOverPairs.size() == 466440ul);
-//  }
+  //  auto result = asmc.decodeAllInJob();
+  //
+  //  SECTION("test decode pair summarize")
+  //  {
+  //    REQUIRE(result.sumOverPairs.size() == 466440ul);
+  //  }
 }
 
 TEST_CASE("test ASMC decodePairs", "[ASMC]")
 {
-  ASMC::ASMC asmc(ASMC_FILE_DIR "/EXAMPLE/exampleFile.n300.array",
-                  ASMC_FILE_DIR "/DECODING_QUANTITIES/30-100-2000.decodingQuantities.gz");
+  ASMC::ASMC asmc(ASMC_DATA_DIR "/examples/asmc/exampleFile.n300.array",
+                  ASMC_DATA_DIR "/decoding_quantities/30-100-2000_CEU.decodingQuantities.gz");
+
+  asmc.setStorePerPairMap();
+  asmc.setStorePerPairPosterior();
+  asmc.setStorePerPairPosteriorMean();
+  asmc.setStorePerPairMap();
 
   std::vector<unsigned long> indA = {1, 2, 3};
   std::vector<unsigned long> indB = {2, 3, 4};
-  asmc.decodePairs(indA, indB, true, true, true, true);
+  asmc.decodePairs(indA, indB);
   auto result = asmc.getRefOfResults();
 
   SECTION("test decode pair summarize")
   {
     REQUIRE(result.perPairIndices.size() == 3ul);
 
-    REQUIRE(result.perPairPosteriorMeans(0, 0) == Approx(7444.42236f).margin(1.f));
-    REQUIRE(result.perPairPosteriorMeans(1, 8) == Approx(12891.93066f).margin(1.f));
-    REQUIRE(result.perPairPosteriorMeans(2, 29) == Approx(27244.82812f).margin(1.f));
+    REQUIRE(result.perPairPosteriorMeans(0, 0) == Approx(15968.91016f).margin(1.f));
+    REQUIRE(result.perPairPosteriorMeans(1, 8) == Approx(27963.49805f).margin(1.f));
+    REQUIRE(result.perPairPosteriorMeans(2, 29) == Approx(48573.32812f).margin(1.f));
 
     REQUIRE(result.perPairMAPs(0, 0) == 29);
-    REQUIRE(result.perPairMAPs(1, 1234) == 64);
-    REQUIRE(result.perPairMAPs(2, 7) == 29);
+    REQUIRE(result.perPairMAPs(1, 1234) == 65);
+    REQUIRE(result.perPairMAPs(2, 7) == 33);
 
     for (Eigen::Index idx = 0ll; idx < result.perPairPosteriors.size(); ++idx) {
       REQUIRE((result.perPairPosteriors.at(idx).colwise().sum() - result.perPairPosteriorMeans.row(idx)).isZero(1e-2));
