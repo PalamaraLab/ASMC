@@ -13,24 +13,23 @@
 # You should have received a copy of the GNU General Public License
 # along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
-# import numpy as np
-# import collections
-from .pyASMC import (  # NOQA
-    BinaryDataReader,
-    DecodingModeOverall,
-    DecodingMode,
-    DecodingReturnValues,
-    DecodePairsReturnStruct,
-    IbdPairDataLine,
-    Individual,
-    PairObservations,
-    DecodingQuantities,
-    DecodingParams,
-    Data,
-    HMM,
-    FastSMC,
-    ASMC,
-    )
+
+from asmc.asmc_python_bindings import BinaryDataReader
+from asmc.asmc_python_bindings import DecodingModeOverall
+from asmc.asmc_python_bindings import DecodingMode
+from asmc.asmc_python_bindings import DecodingReturnValues
+from asmc.asmc_python_bindings import DecodePairsReturnStruct
+from asmc.asmc_python_bindings import IbdPairDataLine
+from asmc.asmc_python_bindings import Individual
+from asmc.asmc_python_bindings import PairObservations
+from asmc.asmc_python_bindings import DecodingQuantities
+from asmc.asmc_python_bindings import DecodingParams
+from asmc.asmc_python_bindings import Data
+from asmc.asmc_python_bindings import HMM
+from asmc.asmc_python_bindings import FastSMC
+from asmc.asmc_python_bindings import ASMC
+
+
 #
 # ASMCReturnValues = collections.namedtuple(
 #     "ASMCReturnValues",

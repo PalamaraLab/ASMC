@@ -48,7 +48,7 @@ jobs:
 
       - name: python unit tests
         run: |
-          python -m unittest discover ASMC_SRC/TESTS "test_unit*.py"
+          python -m unittest discover test "test_unit*.py"
 
       - name: python regression tests
         run: |

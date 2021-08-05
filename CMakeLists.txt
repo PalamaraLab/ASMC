@@ -40,9 +40,16 @@ include(cmake/SIMD.cmake)
 set(ASMC_exe_dir ${CMAKE_CURRENT_SOURCE_DIR}/exe)
 set(ASMC_source_dir ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(ASMC_test_dir ${CMAKE_CURRENT_SOURCE_DIR}/test)
-set(ASMC_file_dir ${CMAKE_CURRENT_SOURCE_DIR}/FILES)
+set(ASMC_data_dir /home/fergus/GitRepos/PalamaraLab/ASMC_data)
 add_definitions(-DASMC_TEST_DIR=\"${ASMC_test_dir}\")
-add_definitions(-DASMC_FILE_DIR=\"${ASMC_file_dir}\")
+add_definitions(-DASMC_DATA_DIR=\"${ASMC_data_dir}\")
+
+option(ASMC_TESTING "Whether to generate testing targets" ON)
+if (NOT EXISTS ${ASMC_data_dir}/README.md)
+    message(STATUS "The data directory ${ASMC_data_dir} does not exist, so testing will not work.")
+    message(STATUS "For testing functionality, please check out all submodules.")
+    set(ASMC_TESTING OFF)
+endif ()
 
 set(ASMC_source
         ${ASMC_source_dir}/HMM.cpp
@@ -112,10 +119,13 @@ set(ASMC_regression
         )
 
 option(ASMC_PYTHON_BINDINGS "Whether to build the ASMC python bindings" OFF)
+if (EXISTS ${CMAKE_SOURCE_DIR}/pybind11/LICENSE)
+    set(ASMC_PYTHON_BINDINGS ON)
+endif()
 if (ASMC_PYTHON_BINDINGS)
     add_subdirectory(pybind11)
-    pybind11_add_module(pyASMC ${ASMC_source_dir}/pybind.cpp)
-    target_link_libraries(pyASMC PRIVATE ASMC)
+    pybind11_add_module(asmc_python_bindings ${ASMC_source_dir}/pybind.cpp)
+    target_link_libraries(asmc_python_bindings PRIVATE ASMC)
 endif ()
 
 # The main ASMC library
@@ -134,17 +144,20 @@ target_link_libraries(FastSMC_exe PRIVATE ASMC)
 add_executable(convertBinary_exe ${convertBinary_main})
 target_link_libraries(convertBinary_exe PRIVATE ASMC)
 
-enable_testing()
 
-add_executable(ASMC_unit_tests ${ASMC_unit_tests})
-target_include_directories(ASMC_unit_tests PRIVATE ${ASMC_test_dir})
-target_link_libraries(ASMC_unit_tests PRIVATE ASMC)
-add_test(Asmc_unit_tests ASMC_unit_tests)
+if (ASMC_TESTING)
+    enable_testing()
 
-add_executable(ASMC_regression ${ASMC_regression})
-target_include_directories(ASMC_regression PRIVATE ${ASMC_test_dir})
-target_link_libraries(ASMC_regression PRIVATE ASMC)
-add_test(regression ASMC_regression)
+    add_executable(ASMC_unit_tests ${ASMC_unit_tests})
+    target_include_directories(ASMC_unit_tests PRIVATE ${ASMC_test_dir})
+    target_link_libraries(ASMC_unit_tests PRIVATE ASMC)
+    add_test(Asmc_unit_tests ASMC_unit_tests)
+
+    add_executable(ASMC_regression ${ASMC_regression})
+    target_include_directories(ASMC_regression PRIVATE ${ASMC_test_dir})
+    target_link_libraries(ASMC_regression PRIVATE ASMC)
+    add_test(regression ASMC_regression)
+endif ()
 
 # boost as a required dependency for ASMC
 find_package(Boost REQUIRED COMPONENTS program_options iostreams)
