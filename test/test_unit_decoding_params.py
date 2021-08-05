@@ -1,13 +1,20 @@
+import pathlib
+import sys
 import unittest
-from asmc import DecodingParams, DecodingMode
+
+from asmc.asmc import DecodingParams, DecodingMode
+
+data_dir = pathlib.Path(__file__).resolve().parent.parent / 'ASMC_data'
+if not data_dir.exists():
+    print(f'ERROR. {data_dir} does not exist. Did you clone ASMC recursively with submodules?')
+    sys.exit()
 
 
 class TestDecodingParams(unittest.TestCase):
 
     def setUp(self):
-        self.inFileRoot = "FILES/EXAMPLE/exampleFile.n300.array"
-        self.decodingQuantFile = "FILES/DECODING_QUANTITIES" \
-            "/30-100-2000_CEU.decodingQuantities.gz"
+        self.inFileRoot = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300.array')
+        self.decodingQuantFile = str(data_dir / 'decoding_quantities' / '30-100-2000_CEU.decodingQuantities.gz')
 
     def test_array_folded(self):
         params = DecodingParams(self.inFileRoot, self.decodingQuantFile)

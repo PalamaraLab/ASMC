@@ -1,18 +1,20 @@
+import pathlib
+import sys
 import unittest
-from asmc import (
-    HMM,
-    DecodingQuantities,
-    DecodingParams,
-    Data
-)
+
+from asmc.asmc import *
+
+data_dir = pathlib.Path(__file__).resolve().parent.parent / 'ASMC_data'
+if not data_dir.exists():
+    print(f'ERROR. {data_dir} does not exist. Did you clone ASMC recursively with submodules?')
+    sys.exit()
 
 
 class TestASMC(unittest.TestCase):
 
     def setUp(self):
-        inFileRoot = "FILES/EXAMPLE/exampleFile.n300.array"
-        decodingQuantFile = "FILES/DECODING_QUANTITIES" \
-            "/30-100-2000_CEU.decodingQuantities.gz"
+        inFileRoot = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300.array')
+        decodingQuantFile = str(data_dir / 'decoding_quantities' / '30-100-2000_CEU.decodingQuantities.gz')
         self.sequenceLength = Data.countHapLines(inFileRoot)
         params = DecodingParams(inFileRoot, decodingQuantFile)
         self.data = Data(params)
@@ -68,11 +70,10 @@ class TestASMC(unittest.TestCase):
 
 class TestASMCDecodingParams(unittest.TestCase):
     def test_no_compress(self):
-        inFileRoot = "FILES/EXAMPLE/exampleFile.n300.array"
-        decodingQuantFile = "FILES/DECODING_QUANTITIES" \
-            "/30-100-2000_CEU.decodingQuantities.gz"
+        inFileRoot = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300.array')
+        decodingQuantFile = str(data_dir / 'decoding_quantities' / '30-100-2000_CEU.decodingQuantities.gz')
         params = DecodingParams(inFileRoot, decodingQuantFile, compress=True,
-            skipCSFSdistance=float('nan'))
+                                skipCSFSdistance=float('nan'))
 
         self.assertEqual(params.compress, True)
         self.assertEqual(params.skipCSFSdistance, float('inf'))
