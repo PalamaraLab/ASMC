@@ -21,8 +21,8 @@
 
 TEST_CASE("test DecodingParams", "[DecodingParams]")
 {
-  std::string inFileRoot = ASMC_FILE_DIR "/EXAMPLE/exampleFile.n300.array";
-  std::string decodingQuantFile = ASMC_FILE_DIR "/DECODING_QUANTITIES/30-100-2000.decodingQuantities.gz";
+  std::string inFileRoot = ASMC_DATA_DIR "/examples/asmc/exampleFile.n300.array";
+  std::string decodingQuantFile = ASMC_DATA_DIR "/decoding_quantities/30-100-2000_CEU.decodingQuantities.gz";
 
   SECTION("test array folded") {
     DecodingParams params(inFileRoot, decodingQuantFile);

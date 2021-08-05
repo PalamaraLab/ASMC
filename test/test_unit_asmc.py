@@ -12,7 +12,7 @@ class TestASMC(unittest.TestCase):
     def setUp(self):
         inFileRoot = "FILES/EXAMPLE/exampleFile.n300.array"
         decodingQuantFile = "FILES/DECODING_QUANTITIES" \
-            "/30-100-2000.decodingQuantities.gz"
+            "/30-100-2000_CEU.decodingQuantities.gz"
         self.sequenceLength = Data.countHapLines(inFileRoot)
         params = DecodingParams(inFileRoot, decodingQuantFile)
         self.data = Data(params)
@@ -70,7 +70,7 @@ class TestASMCDecodingParams(unittest.TestCase):
     def test_no_compress(self):
         inFileRoot = "FILES/EXAMPLE/exampleFile.n300.array"
         decodingQuantFile = "FILES/DECODING_QUANTITIES" \
-            "/30-100-2000.decodingQuantities.gz"
+            "/30-100-2000_CEU.decodingQuantities.gz"
         params = DecodingParams(inFileRoot, decodingQuantFile, compress=True,
             skipCSFSdistance=float('nan'))
 

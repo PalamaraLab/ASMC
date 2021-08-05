@@ -7,7 +7,7 @@ class TestDecodingParams(unittest.TestCase):
     def setUp(self):
         self.inFileRoot = "FILES/EXAMPLE/exampleFile.n300.array"
         self.decodingQuantFile = "FILES/DECODING_QUANTITIES" \
-            "/30-100-2000.decodingQuantities.gz"
+            "/30-100-2000_CEU.decodingQuantities.gz"
 
     def test_array_folded(self):
         params = DecodingParams(self.inFileRoot, self.decodingQuantFile)

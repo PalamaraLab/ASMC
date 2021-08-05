@@ -37,7 +37,7 @@ def test_regession(asmc_exe):
         old_lines = gz_f.readlines()
 
     # New file contents are the result of running the example with the current ASMC source
-    decoding_file = os.path.join(base_dir, 'FILES', 'DECODING_QUANTITIES', '30-100-2000.decodingQuantities.gz')
+    decoding_file = os.path.join(base_dir, 'FILES', 'DECODING_QUANTITIES', '30-100-2000_CEU.decodingQuantities.gz')
     in_file_root = os.path.join(base_dir, 'FILES', 'EXAMPLE', 'exampleFile.n300.array')
 
     subprocess.call([

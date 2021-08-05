@@ -23,20 +23,23 @@ using Catch::Matchers::Contains;
 
 TEST_CASE("test validate decoding quantities file", "[DecodingQuantities]")
 {
-  std::string nonExistentDecodingQuantitiesFile = ASMC_TEST_DIR "/random_nonexistent_file.txt";
-  std::string goodDecodingQuantitiesFile = ASMC_TEST_DIR "/data/decoding_quantities_good.txt";
-  std::string badDecodingQuantitiesFile = ASMC_TEST_DIR "/data/decoding_quantities_bad.txt";
+  std::string nonExistentDecodingQuantitiesFile = ASMC_DATA_DIR "/random_nonexistent_file.txt";
+  std::string goodDecodingQuantitiesFile = ASMC_DATA_DIR "/testing/asmc/decoding_quantities_good.txt";
+  std::string badDecodingQuantitiesFile = ASMC_DATA_DIR "/testing/asmc/decoding_quantities_bad.txt";
 
-  SECTION("test nonexistent file") {
+  SECTION("test nonexistent file")
+  {
     CHECK_THROWS_WITH(DecodingQuantities{nonExistentDecodingQuantitiesFile},
                       Contains("random_nonexistent_file.txt does not exist"));
   }
 
-  SECTION("test good file") {
+  SECTION("test good file")
+  {
     CHECK_NOTHROW(DecodingQuantities{goodDecodingQuantitiesFile});
   }
 
-  SECTION("test bad file") {
+  SECTION("test bad file")
+  {
     CHECK_THROWS_WITH(DecodingQuantities{badDecodingQuantitiesFile},
                       Contains("decoding_quantities_bad.txt does not seem to contain the correct information") &&
                           Contains("but instead found \"this file does not start with"));

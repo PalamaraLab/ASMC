@@ -46,7 +46,7 @@ TEST_CASE("IbdPairDataLine default member test", "[BinaryDataReader]")
 
 TEST_CASE("BinaryDataReader real data test", "[BinaryDataReader]")
 {
-  BinaryDataReader dataReader(ASMC_TEST_DIR "/data/binary_output.bibd.gz");
+  BinaryDataReader dataReader(ASMC_DATA_DIR "/testing/asmc/binary_output.bibd.gz");
 
   IbdPairDataLine line1 = dataReader.getNextLine();
   REQUIRE(line1.ind1FamId == "1_94");
@@ -79,7 +79,7 @@ TEST_CASE("BinaryDataReader real data test", "[BinaryDataReader]")
   REQUIRE(line2.mapEst == Approx(24.9999f).epsilon(1e-5));
 
   int numLinesRead = 2;
-  while(dataReader.moreLinesInFile()) {
+  while (dataReader.moreLinesInFile()) {
     IbdPairDataLine line = dataReader.getNextLine();
     numLinesRead++;
   }

@@ -23,8 +23,8 @@
 TEST_CASE("test hmm functions", "[HMM]")
 {
   DecodingParams params(
-      ASMC_FILE_DIR "/EXAMPLE/exampleFile.n300.array",
-      ASMC_FILE_DIR "/DECODING_QUANTITIES/30-100-2000.decodingQuantities.gz");
+      ASMC_DATA_DIR "/examples/asmc/exampleFile.n300.array",
+      ASMC_DATA_DIR "/decoding_quantities/30-100-2000_CEU.decodingQuantities.gz");
 
   Data data(params);
   HMM hmm(data, params);
