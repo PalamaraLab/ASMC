@@ -3,11 +3,11 @@ name: mirror to public repo
 on:
   push:
     branches:
-      - zzz_master
+      - main
 
 jobs:
   mirror:
-    if:  ${{ github.repository == 'PalamaraLab/FastSMC_dev' }}
+    if:  ${{ github.repository == 'PalamaraLab/ASMC_dev' }}
     runs-on: ubuntu-latest
     steps:
 
@@ -19,5 +19,5 @@ jobs:
 
       - name: mirror master to public repo
         run: |
-          remote_repo="https://fcooper8472:${{ secrets.DEPLOY_ACCESS_TOKEN }}@github.com/PalamaraLab/FastSMC.git"
+          remote_repo="https://fcooper8472:${{ secrets.DEPLOY_ACCESS_TOKEN }}@github.com/PalamaraLab/ASMC.git"
           git push "${remote_repo}" HEAD:master --follow-tags --force
