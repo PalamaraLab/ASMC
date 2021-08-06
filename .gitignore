@@ -34,3 +34,5 @@
 src/__pycache__/
 
 test/__pycache__/
+
+notebooks/.ipynb_checkpoints/
