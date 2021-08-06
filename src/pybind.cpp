@@ -219,7 +219,7 @@ PYBIND11_MODULE(asmc_python_bindings, m)
       .def("makePairObs", &HMM::makePairObs, "iHap"_a, "ind1"_a, "jHap"_a, "ind2"_a);
   py::class_<ASMC::FastSMC>(m, "FastSMC")
       .def(py::init<DecodingParams>(), "decodingParams"_a)
-      .def(py::init<const std::string&, const std::string&>(), "in_dir"_a, "out_dir"_a)
+      .def(py::init<const std::string&, const std::string&, const std::string&>(), "in_dir"_a, "dq_file"_a, "out_dir"_a)
       .def("run", &ASMC::FastSMC::run);
   py::class_<ASMC::ASMC>(m, "ASMC")
       .def(py::init<DecodingParams>(), "decodingParams"_a)

@@ -31,8 +31,8 @@ ASMC::FastSMC::FastSMC(DecodingParams params) : mParams{std::move(params)}, mDat
 {
 }
 
-ASMC::FastSMC::FastSMC(const std::string& inFileRoot, const std::string& outFileRoot)
-    : mParams{inFileRoot, inFileRoot + ".decodingQuantities.gz", outFileRoot, true},
+ASMC::FastSMC::FastSMC(const std::string& inFileRoot, const std::string& dqFile, const std::string& outFileRoot)
+: mParams{inFileRoot, dqFile, outFileRoot, true},
       mData{mParams},
       mHmm{mData, mParams}
 {
