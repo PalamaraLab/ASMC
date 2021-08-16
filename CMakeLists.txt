@@ -1,7 +1,7 @@
 # This file is part of https://github.com/PalamaraLab/ASMC_new_dev which is released under the GPL-3.0 license.
 # See accompanying LICENSE and COPYING for copyright notice and full details.
 
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.15)
 message(STATUS "CMake version: ${CMAKE_VERSION}")
 include(cmake/AutodetectVcpkgToolchainFile.cmake)
 
@@ -123,6 +123,7 @@ if (EXISTS ${CMAKE_SOURCE_DIR}/pybind11/LICENSE)
     set(ASMC_PYTHON_BINDINGS ON)
 endif()
 if (ASMC_PYTHON_BINDINGS)
+    find_package(Python3 3.6 COMPONENTS Interpreter Development REQUIRED)
     add_subdirectory(pybind11)
     pybind11_add_module(asmc_python_bindings ${ASMC_source_dir}/pybind.cpp)
     target_link_libraries(asmc_python_bindings PRIVATE ASMC)
@@ -199,7 +200,7 @@ option(ASMC_REGRESSION_TESTING "Whether to generate regression testing target" O
 if (ASMC_REGRESSION_TESTING)
 
     # Python is required for running regression tests
-    find_package(Python3 REQUIRED)
+    find_package(Python3 3.6 COMPONENTS Interpreter REQUIRED)
 
     add_custom_target(
             Regression
