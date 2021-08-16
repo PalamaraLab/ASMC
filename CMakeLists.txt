@@ -132,6 +132,13 @@ endif ()
 add_library(ASMC ${ASMC_source} ${ASMC_headers})
 target_include_directories(ASMC PUBLIC ${ASMC_source_dir})
 
+# Link against std filesystem on GCC < 8.4
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8.4)
+        target_link_libraries(ASMC PRIVATE stdc++fs)
+    endif ()
+endif ()
+
 # The main ASMC executable
 add_executable(ASMC_exe ${ASMC_main})
 target_link_libraries(ASMC_exe PRIVATE ASMC)

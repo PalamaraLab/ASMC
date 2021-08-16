@@ -3,7 +3,7 @@ name: mirror to public repo
 on:
   push:
     branches:
-      - main
+      - xmain
 
 jobs:
   mirror:
@@ -20,4 +20,4 @@ jobs:
       - name: mirror master to public repo
         run: |
           remote_repo="https://fcooper8472:${{ secrets.DEPLOY_ACCESS_TOKEN }}@github.com/PalamaraLab/ASMC.git"
-          git push "${remote_repo}" HEAD:master --follow-tags --force
+          git push "${remote_repo}" HEAD:main --follow-tags --force
