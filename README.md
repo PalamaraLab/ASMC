@@ -24,13 +24,15 @@ They consist of a C++ library, C++ executables, and optional Python bindings.
 The C++ libraries and executables require:
 
 - A C++ compiler (C++17 or later)
-- CMake (3.12 or later)
+- CMake (3.15 or later)
 - Boost (1.62 or later)
 - Eigen (3.3.4 or later)
 - {fmt}
+- OpenMP
 - zlib
+- Python (3.6 or later) with development files (optional, for python bindings)
 
-We recommend installing these dependencies using vcpkg, distributed with this repository as a submodule.
+We recommend installing dependencies using vcpkg, distributed with this repository as a submodule.
 Information below.
 
 To build the Python bindings you additionally require:
@@ -38,60 +40,10 @@ To build the Python bindings you additionally require:
 - Python (3.6 or later)
 - PyBind11 (distributed with this repository as a submodule)
 
-## Getting the code
+## Quickstart guides
 
-**For code users**
-```bash
-git clone --recurse-submodules https://github.com/PalamaraLab/ASMC
-cd ASMC
-```
-
-**For code developers**
-```bash
-git clone --recurse-submodules https://github.com/PalamaraLab/ASMC_dev
-cd ASMC
-```
-
-## Install dependencies
-
-### Using vcpkg (recommended)
-
-Dependencies will be automatically built and installed during the CMake configuration step.
-No additional steps are required to install dependencies.
-
-### Using your system package manager
-
-**Ubuntu**
-```bash
-sudo apt install g++ cmake libboost-all-dev libeigen3-dev
-```
-
-**macOS (using homebrew and assuming Xcode is installed)**
-```bash
-brew install cmake boost eigen
-```
-
-## Build the project
-
-These instructions will build the library, executables and Python bindings.
-
-```bash
-mkdir build && cd build
-cmake ..
-cmake --build . --parallel 4
-```
-
-Note: you can locate the build directory anywhere you like: just run `cmake /path/to/ASMC`.
-
-## Install the Python module
-
-For code development, install the python module locally with `pip` from the top-level ASMC directory:
-
-```bash
-pip install .
-```
-
-If you are a code user, instead install directly from `PyPI` following instructions in [ASMC python bindings](./docs/asmc_python.md) or [FastSMC python bindings](./docs/fastsmc_python.md).
+- [For users](./docs/quickstart_user.md)
+- [For developers](./docs/quickstart_developer.md)
 
 ## Decoding Quantities
 
@@ -110,4 +62,4 @@ The ASMC algorithm and software were developed in
 - P. Palamara, J. Terhorst, Y. Song, A. Price. High-throughput inference of pairwise coalescence times identifies signals of selection and enriched disease heritability. *Nature Genetics*, 2018.
 
 The FastSMC algorithm and software were developed in
-- J. Nait Saada, G. Kalantzis, D. Shyr, F. Cooper, M. Robinson, A. Gusev, P. F. Palamara. Identity-by-descent detection across 487,409 British samples reveals fine-scale evolutionary history and trait associations. *Nature Communications*, in press.
+- J. Nait Saada, G. Kalantzis, D. Shyr, F. Cooper, M. Robinson, A. Gusev, P. F. Palamara. Identity-by-descent detection across 487,409 British samples reveals fine-scale evolutionary history and trait associations. *Nature Communications*, 2020.

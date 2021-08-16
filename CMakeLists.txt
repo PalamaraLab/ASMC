@@ -118,15 +118,17 @@ set(ASMC_regression
         ${ASMC_test_dir}/test_fastsmc_regression.cpp
         )
 
-option(ASMC_PYTHON_BINDINGS "Whether to build the ASMC python bindings" OFF)
-if (EXISTS ${CMAKE_SOURCE_DIR}/pybind11/LICENSE)
-    set(ASMC_PYTHON_BINDINGS ON)
-endif()
-if (ASMC_PYTHON_BINDINGS)
-    find_package(Python3 3.6 COMPONENTS Interpreter Development REQUIRED)
-    add_subdirectory(pybind11)
-    pybind11_add_module(asmc_python_bindings ${ASMC_source_dir}/pybind.cpp)
-    target_link_libraries(asmc_python_bindings PRIVATE ASMC)
+if (NOT ASMC_NO_PYTHON)
+    option(ASMC_PYTHON_BINDINGS "Whether to build the ASMC python bindings" OFF)
+    if (EXISTS ${CMAKE_SOURCE_DIR}/pybind11/LICENSE)
+        set(ASMC_PYTHON_BINDINGS ON)
+    endif ()
+    if (ASMC_PYTHON_BINDINGS)
+        find_package(Python3 3.6 COMPONENTS Interpreter Development REQUIRED)
+        add_subdirectory(pybind11)
+        pybind11_add_module(asmc_python_bindings ${ASMC_source_dir}/pybind.cpp)
+        target_link_libraries(asmc_python_bindings PRIVATE ASMC)
+    endif ()
 endif ()
 
 # The main ASMC library
@@ -196,22 +198,23 @@ target_link_libraries(ASMC PRIVATE fmt::fmt)
 
 
 # Optionally run regression tests to ensure core functionality remains unchanged
-option(ASMC_REGRESSION_TESTING "Whether to generate regression testing target" OFF)
-if (ASMC_REGRESSION_TESTING)
+if (NOT ASMC_NO_PYTHON)
+    option(ASMC_REGRESSION_TESTING "Whether to generate regression testing target" OFF)
+    if (ASMC_REGRESSION_TESTING)
 
-    # Python is required for running regression tests
-    find_package(Python3 3.6 COMPONENTS Interpreter REQUIRED)
+        # Python is required for running regression tests
+        find_package(Python3 3.6 COMPONENTS Interpreter REQUIRED)
 
-    add_custom_target(
-            Regression
-            COMMAND ${Python3_EXECUTABLE} regression_test.py $<TARGET_FILE:ASMC_exe>
-            DEPENDS ASMC_exe
-            COMMENT "Running ASMC regression test"
-            WORKING_DIRECTORY ${ASMC_test_dir}
-    )
+        add_custom_target(
+                Regression
+                COMMAND ${Python3_EXECUTABLE} regression_test.py $<TARGET_FILE:ASMC_exe>
+                DEPENDS ASMC_exe
+                COMMENT "Running ASMC regression test"
+                WORKING_DIRECTORY ${ASMC_test_dir}
+        )
 
+    endif ()
 endif ()
-
 
 # Clang tidy as optional static analyzer
 option(Template_USE_CLANG_TIDY "Use clang tidy for static analysis" OFF)
