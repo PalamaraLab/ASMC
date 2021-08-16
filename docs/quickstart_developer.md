@@ -85,6 +85,6 @@ From the `ASMC_dev` directory:
 python3 -m venv venv
 source venv/bin/activate
 
-pip install --upgrade pip setuptools wheel
+pip install --upgrade pip setuptools wheel ninja
 pip install .
 ```
