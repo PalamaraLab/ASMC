@@ -14,6 +14,7 @@
 //    along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -31,7 +32,10 @@
 #include "Data.hpp"
 #include <boost/math/distributions/hypergeometric.hpp>
 
+#include "GeneticMap.hpp"
+
 using namespace std;
+namespace fs = std::filesystem;
 
 Data::Data(const DecodingParams& params)
 {
@@ -97,45 +101,25 @@ Data::Data(const DecodingParams& params)
 // *** read genetic map
 vector<pair<unsigned long, double>> Data::readMapFastSMC(const string& inFileRoot)
 {
-  FileUtils::AutoGzIfstream mapFileStream;
-  if (FileUtils::fileExists(inFileRoot + ".map.gz")) {
-    mapFileStream.openOrExit(inFileRoot + ".map.gz");
-  } else if (FileUtils::fileExists(inFileRoot + ".map")) {
-    mapFileStream.openOrExit(inFileRoot + ".map");
+  std::string mapFile;
+  if (mapFile = inFileRoot + ".map.gz"; fs::is_regular_file(mapFile)) {
+  } else if (mapFile = inFileRoot + ".map"; fs::is_regular_file(mapFile)) {
   } else {
-    cerr << "ERROR. Could not find hap file in " + inFileRoot + ".map.gz or " + inFileRoot + ".map" << endl;
+    cerr << "ERROR. Could not find map file in " + inFileRoot + ".map.gz or " + inFileRoot + ".map" << endl;
     exit(1);
   }
 
+  auto map = asmc::GeneticMap(mapFile);
+
+  const std::vector<unsigned long>& physicalPositions = map.getPhysicalPositions();
+  const std::vector<double>& geneticPositions = map.getGeneticPositions();
+
   std::vector<std::pair<unsigned long, double>> geneticMap;
+  geneticMap.reserve(physicalPositions.size());
 
-  string map_field[3];
-  string line;
-  stringstream ss;
-  unsigned int cur_g = 0;
-
-  while (getline(mapFileStream, line)) {
-    ss.clear();
-    ss.str(line);
-    ss >> map_field[0] >> map_field[1] >> map_field[2];
-
-    // Identify whether there's a header row
-    // First, if the initial field is empty (e.g. empty header row), continue
-    if (map_field[0].empty()) {
-      continue;
-    }
-    // Second, if the initial field is not convertible to an integer, assume it's a header row and continue
-    try {
-      stoi(map_field[0]);
-    } catch (const std::invalid_argument& e) {
-      continue;
-    }
-
-    geneticMap.emplace_back(stol(map_field[0]), stod(map_field[2]));
-    cur_g++;
+  for (auto i = 0ul; i < physicalPositions.size(); ++i) {
+    geneticMap.emplace_back(physicalPositions.at(i), geneticPositions.at(i));
   }
-
-  mapFileStream.close();
 
   return geneticMap;
 }
