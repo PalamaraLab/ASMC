@@ -1,0 +1,12 @@
+{
+  "registries": [
+    {
+      "kind": "git",
+      "repository": "https://github.com/PalamaraLab/vcpkg-registry",
+      "baseline": "7686b4e2a35c692fe97d5e89d4a253fff3af85d1",
+      "packages": [
+        "asmc-data-module"
+      ]
+    }
+  ]
+}

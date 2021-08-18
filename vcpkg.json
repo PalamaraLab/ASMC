@@ -2,6 +2,7 @@
   "name": "asmc-fastsmc",
   "version": "0.1",
   "dependencies": [
+    "asmc-data-module",
     "boost-algorithm",
     "boost-dynamic-bitset",
     "boost-iostreams",

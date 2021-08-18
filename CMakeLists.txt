@@ -193,8 +193,8 @@ find_package(fmt CONFIG REQUIRED)
 target_link_libraries(ASMC PRIVATE fmt::fmt)
 
 # Might require the data module in future
-#find_package(AsmcDataModule CONFIG REQUIRED)
-#target_link_libraries(ASMC PRIVATE AsmcDataModule::data_module_lib)
+find_package(asmc-data-module CONFIG REQUIRED)
+target_link_libraries(ASMC PRIVATE asmc-data-module::data_module_lib)
 
 
 # Optionally run regression tests to ensure core functionality remains unchanged
