@@ -36,8 +36,7 @@ jobs:
           sudo apt -y install g++-10 lcov libcurl4-openssl-dev
 
       - name: make build directory
-        run: mkdir build_dir
-        if: steps.cache.outputs.cache-hit != 'true'
+        run: mkdir -p build_dir
 
       - name: run unit tests with coverage
         run: |

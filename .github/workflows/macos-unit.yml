@@ -38,8 +38,7 @@ jobs:
           brew install libomp
 
       - name: make build directory
-        run: mkdir build_dir
-        if: steps.cache.outputs.cache-hit != 'true'
+        run: mkdir -p build_dir
 
       - name: cmake configure
         run: cmake ..

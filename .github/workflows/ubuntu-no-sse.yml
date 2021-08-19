@@ -34,8 +34,7 @@ jobs:
           key: ${{ runner.os }}-${{ env.CXX }}-${{ hashFiles('vcpkg.json', 'vcpkg/CHANGELOG.md') }}
 
       - name: make build directory
-        run: mkdir build_dir
-        if: steps.cache.outputs.cache-hit != 'true'
+        run: mkdir -p build_dir
 
       - name: cmake configure
         run: cmake .. -DASMC_FORCE_PURE:BOOL=TRUE
