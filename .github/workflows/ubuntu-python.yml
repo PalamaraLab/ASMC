@@ -3,7 +3,7 @@ name: Python 3.6 3.9
 on:
   push:
     branches:
-      - master
+      - main
   pull_request:
     branches:
       - '**'
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-20.04
     env:
       CXX: g++-9
-    if: ${{ github.event_name == 'pull_request' || github.repository == 'PalamaraLab/FastSMC' }}
+    if: ${{ github.event_name == 'pull_request' || github.repository == 'PalamaraLab/ASMC' }}
 
     strategy:
       matrix:

@@ -3,7 +3,10 @@ name: PyPI
 on:
   push:
     branches:
-      - stable
+      - main
+  release:
+    types:
+      - published
 
 env:
   CIBW_BUILD: cp36-* cp37-* cp38-* cp39-*
@@ -13,12 +16,10 @@ env:
   MACOSX_DEPLOYMENT_TARGET: 10.15
 
 
-
-
 jobs:
   build-wheels:
     runs-on: ${{ matrix.os }}
-    if:  ${{ github.repository == 'PalamaraLab/FastSMC' }}
+    if:  ${{ github.repository == 'PalamaraLab/ASMC' }}
     strategy:
       fail-fast: false
       matrix:
@@ -44,7 +45,7 @@ jobs:
     name: Upload wheels to PyPI
     needs: build-wheels
     runs-on: ubuntu-latest
-    if:  ${{ github.repository == 'PalamaraLab/FastSMC' }}
+    if: github.event_name == 'release' && github.event.action == 'published'
 
     steps:
       - uses: actions/setup-python@v2
