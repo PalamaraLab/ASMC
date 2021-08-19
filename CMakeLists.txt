@@ -40,7 +40,7 @@ include(cmake/SIMD.cmake)
 set(ASMC_exe_dir ${CMAKE_CURRENT_SOURCE_DIR}/exe)
 set(ASMC_source_dir ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(ASMC_test_dir ${CMAKE_CURRENT_SOURCE_DIR}/test)
-set(ASMC_data_dir /home/fergus/GitRepos/PalamaraLab/ASMC_data)
+set(ASMC_data_dir ${CMAKE_CURRENT_SOURCE_DIR}/ASMC_data)
 add_definitions(-DASMC_TEST_DIR=\"${ASMC_test_dir}\")
 add_definitions(-DASMC_DATA_DIR=\"${ASMC_data_dir}\")
 
