@@ -3,7 +3,7 @@ name: Ubuntu coverage
 on:
   push:
     branches:
-      - master
+      - main
 
 jobs:
 
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-20.04
     env:
       CXX: g++-10
-    if: ${{ github.repository == 'PalamaraLab/FastSMC' }}
+    if: ${{ github.repository == 'PalamaraLab/ASMC' }}
 
     steps:
 

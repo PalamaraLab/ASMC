@@ -3,14 +3,14 @@ name: "Unit tests: macOS"
 on:
   push:
     branches:
-      - zzz_master
+      - main
 
 jobs:
 
   build-and-test:
     name: Unit tests on macOS
     runs-on: macos-latest
-    if:  ${{ github.repository == 'PalamaraLab/FastSMC' }}
+    if:  ${{ github.repository == 'PalamaraLab/ASMC' }}
 
     steps:
 

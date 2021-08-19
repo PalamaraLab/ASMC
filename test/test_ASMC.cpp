@@ -58,9 +58,10 @@ TEST_CASE("test ASMC decodePairs", "[ASMC]")
   {
     REQUIRE(result.perPairIndices.size() == 3ul);
 
-    REQUIRE(result.perPairPosteriorMeans(0, 0) == Approx(15968.91016f).margin(1.f));
-    REQUIRE(result.perPairPosteriorMeans(1, 8) == Approx(27963.49805f).margin(1.f));
-    REQUIRE(result.perPairPosteriorMeans(2, 29) == Approx(48573.32812f).margin(1.f));
+    // 0.1% margin in this test as the results can vary between pure and avx/sse
+    REQUIRE(result.perPairPosteriorMeans(0, 0) == Approx(15968.91016f).margin(15968.91016f * 0.001f));
+    REQUIRE(result.perPairPosteriorMeans(1, 8) == Approx(27963.49805f).margin(27963.49805f * 0.001f));
+    REQUIRE(result.perPairPosteriorMeans(2, 29) == Approx(48573.32812f).margin(48573.32812f * 0.001f));
 
     REQUIRE(result.perPairMAPs(0, 0) == 29);
     REQUIRE(result.perPairMAPs(1, 1234) == 65);
