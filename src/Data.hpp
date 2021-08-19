@@ -100,7 +100,7 @@ private:
   void readHaps(std::string inFileRoot, bool foldToMinorAlleles, int jobID, int jobs,
                 std::vector<std::pair<unsigned long int, double>>& genetic_map);
 
-  int readMap(std::string inFileRoot);
+  void readMap(const std::string& inFileRoot);
 
   /**
    * Subsumed functionality from FastSMC to read genetic map as a vector of pairs.

@@ -24,6 +24,7 @@
 #include <vector>
 
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 
 #include "FileUtils.hpp"
 #include "StringUtils.hpp"
@@ -33,6 +34,7 @@
 #include <boost/math/distributions/hypergeometric.hpp>
 
 #include "GeneticMap.hpp"
+#include "PlinkMap.hpp"
 
 using namespace std;
 namespace fs = std::filesystem;
@@ -105,7 +107,7 @@ vector<pair<unsigned long, double>> Data::readMapFastSMC(const string& inFileRoo
   if (mapFile = inFileRoot + ".map.gz"; fs::is_regular_file(mapFile)) {
   } else if (mapFile = inFileRoot + ".map"; fs::is_regular_file(mapFile)) {
   } else {
-    cerr << "ERROR. Could not find map file in " + inFileRoot + ".map.gz or " + inFileRoot + ".map" << endl;
+    fmt::print(cerr, "ERROR. Could not find map file in {}.map.gz or {}.map\n", inFileRoot, inFileRoot);
     exit(1);
   }
 
@@ -143,54 +145,44 @@ int Data::sampleHypergeometric(int populationSize, int numberOfSuccesses, int sa
   return ret;
 }
 
-int Data::readMap(string inFileRoot)
+void Data::readMap(const std::string& inFileRoot)
 {
-  FileUtils::AutoGzIfstream hapsBr;
-  if (FileUtils::fileExists(inFileRoot + ".map.gz")) {
-    hapsBr.openOrExit(inFileRoot + ".map.gz");
-  } else if (FileUtils::fileExists(inFileRoot + ".map")) {
-    hapsBr.openOrExit(inFileRoot + ".map");
+  std::string mapFile;
+  if (mapFile = inFileRoot + ".map.gz"; fs::is_regular_file(mapFile)) {
+  } else if (mapFile = inFileRoot + ".map"; fs::is_regular_file(mapFile)) {
   } else {
-    cerr << "ERROR. Could not find hap file in " + inFileRoot + ".map.gz or " + inFileRoot + ".map" << endl;
+    fmt::print(cerr, "ERROR. Could not find map file in {}.map.gz or {}.map\n", inFileRoot, inFileRoot);
     exit(1);
   }
-  string line;
-  int pos = 0;
-  SNP_IDs = vector<string>(sites);
-  geneticPositions = vector<float>(sites);
-  recRateAtMarker = vector<float>(sites);
-  physicalPositions = vector<int>(sites);
-  while (getline(hapsBr, line)) {
-    vector<string> splitStr;
-    istringstream iss(line);
-    string buf;
-    while (iss >> buf)
-      splitStr.push_back(buf);
-    string ID = splitStr[1];
-    float gen = StringUtils::stof(splitStr[2]) / 100.f;
-    int phys = std::stoi(splitStr[3]);
-    SNP_IDs[pos] = ID;
-    geneticPositions[pos] = gen;
-    physicalPositions[pos] = phys;
-    if (pos > 0) {
-      float genDistFromPrevious = geneticPositions[pos] - geneticPositions[pos - 1];
-      int physDistFromPrevious = physicalPositions[pos] - physicalPositions[pos - 1];
-      float recRate = genDistFromPrevious / physDistFromPrevious;
-      recRateAtMarker[pos] = recRate;
-      if (pos == 1) {
-        // if it's first, add it again for marker 0. Using rate to next marker instead
-        // of previous marker
-        recRateAtMarker[pos] = recRate;
-      }
-    }
-    pos++;
+  auto map = asmc::PlinkMap(mapFile);
+
+  if (map.getNumSites() != static_cast<unsigned long>(sites)) {
+    throw std::runtime_error(
+        fmt::format("ERROR. Expected map {} to contain {} sites, but found {}\n", mapFile, sites, map.getNumSites()));
   }
-  // cout << "\tRead " << pos << " markers from map file." << endl;
-  if (pos != sites) {
-    cerr << "ERROR. Read " << pos << " from map file, expected " << sites << endl;
-    exit(1);
+
+  if (map.getGeneticPositions().empty()) {
+    throw std::runtime_error(fmt::format("ERROR. Expected map {} to contain a column of genetic positions\n", mapFile));
   }
-  return pos;
+
+  SNP_IDs = map.getSnpIds();
+  geneticPositions.reserve(sites);
+  physicalPositions.reserve(sites);
+  recRateAtMarker = std::vector<float>(sites);
+
+  for (auto i = 0ul; i < map.getNumSites(); ++i) {
+    geneticPositions.emplace_back(static_cast<float>(map.getGeneticPositions().at(i)) / 100.f);
+    physicalPositions.emplace_back(static_cast<int>(map.getPhysicalPositions().at(i)));
+  }
+
+  for (auto i = 1ul; i < map.getNumSites(); ++i) {
+    const float genDistFromPrevious = geneticPositions[i] - geneticPositions[i - 1];
+    const float physDistFromPrevious = static_cast<float>(physicalPositions[i] - physicalPositions[i - 1]);
+    recRateAtMarker.at(i) = genDistFromPrevious / physDistFromPrevious;
+  }
+
+  // Re-use the first rec rate in place zero
+  recRateAtMarker.at(0) = recRateAtMarker.at(1);
 }
 
 void Data::readSamplesList(const string& inFileRoot, int jobID, int jobs)
