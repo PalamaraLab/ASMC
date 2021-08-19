@@ -3,7 +3,7 @@ name: mirror to public repo
 on:
   push:
     branches:
-      - xmain
+      - main
 
 jobs:
   mirror:
