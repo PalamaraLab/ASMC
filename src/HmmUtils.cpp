@@ -194,14 +194,14 @@ std::string indPlusHapToCombinedId(std::string_view indId, unsigned long hap)
         fmt::format("Expected an individual ID and either 1 or 2, but got {} and {}\n", indId, hap));
   }
 
-  return fmt::format("{}#{}", indId, hap);
+  return fmt::format("{}_{}", indId, hap);
 }
 
 std::pair<std::string, unsigned long> combinedIdToIndPlusHap(std::string_view combinedId)
 {
-  if (combinedId.length() < 3 || !(combinedId.substr(combinedId.length() - 2, 2) == "#1" ||
-                                   combinedId.substr(combinedId.length() - 2, 2) == "#2")) {
-    throw std::runtime_error(fmt::format("Expected combined ID in form <id>#1 OR <id>#2, but got {}\n", combinedId));
+  if (combinedId.length() < 3 || !(combinedId.substr(combinedId.length() - 2, 2) == "_1" ||
+                                   combinedId.substr(combinedId.length() - 2, 2) == "_2")) {
+    throw std::runtime_error(fmt::format("Expected combined ID in form <id>_1 OR <id>_2, but got {}\n", combinedId));
   }
   return std::make_pair(std::string{combinedId.substr(0, combinedId.length() - 2)},
                         combinedId.back() == '1' ? 1ul : 2ul);
