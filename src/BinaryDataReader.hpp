@@ -53,7 +53,9 @@ struct IbdPairDataLine {
       line << '\t' << lengthInCentimorgans;
     }
 
-    line << '\t' << ibdScore;
+    if (ibdScore != -1.f) {
+      line << '\t' << ibdScore;
+    }
 
     if (postEst != -1.f) {
       line << '\t' << postEst;
@@ -77,6 +79,7 @@ private:
   gzFile mGzBinaryFileHandle;
 
   bool mContainsIbdSegmentLengths = false;
+  bool mContainsIbdScore = false;
   bool mContainsPosteriorAgeEstimates = false;
   bool mContainsMapAgeEstimates = false;
 
@@ -93,6 +96,7 @@ private:
   void ReadHeader()
   {
     gzread(mGzBinaryFileHandle, reinterpret_cast<char*>(&mContainsIbdSegmentLengths), sizeof(bool));
+    gzread(mGzBinaryFileHandle, reinterpret_cast<char*>(&mContainsIbdScore), sizeof(bool));
     gzread(mGzBinaryFileHandle, reinterpret_cast<char*>(&mContainsPosteriorAgeEstimates), sizeof(bool));
     gzread(mGzBinaryFileHandle, reinterpret_cast<char*>(&mContainsMapAgeEstimates), sizeof(bool));
     gzread(mGzBinaryFileHandle, reinterpret_cast<char*>(&mChromosomeNumber), sizeof(int));
@@ -157,7 +161,9 @@ public:
       gzread(mGzBinaryFileHandle, reinterpret_cast<char*>(&line.lengthInCentimorgans), sizeof(float));
     }
 
-    gzread(mGzBinaryFileHandle, reinterpret_cast<char*>(&line.ibdScore), sizeof(float));
+    if (mContainsIbdScore) {
+      gzread(mGzBinaryFileHandle, reinterpret_cast<char*>(&line.ibdScore), sizeof(float));
+    }
 
     if (mContainsPosteriorAgeEstimates) {
       gzread(mGzBinaryFileHandle, reinterpret_cast<char*>(&line.postEst), sizeof(float));

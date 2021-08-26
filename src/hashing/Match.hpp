@@ -47,7 +47,15 @@ public:
     if (mlen >= PAR_MIN_MATCH) {
       const int from = mInterval[0] * intWordSize;
       const int to = mInterval[1] * intWordSize + intWordSize - 1;
-      hmm.decodeFromHashing(p.first, p.second, from, to);
+
+      if(hmm.getDecodingParams().hashingOnly){
+        unsigned int jInd = p.first / 2;
+        unsigned int iInd = p.second / 2;
+        PairObservations observation = hmm.makePairObs(p.first % 2 == 0 ? 1 : 2, jInd, p.second % 2 == 0 ? 1 : 2, iInd);
+        hmm.writePairIBD(observation, from, to);
+      } else {
+        hmm.decodeFromHashing(p.first, p.second, from, to);
+      }
     }
   }
 

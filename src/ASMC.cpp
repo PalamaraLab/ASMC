@@ -23,15 +23,17 @@
 
 ASMC::ASMC::ASMC(DecodingParams params) : mParams{std::move(params)}, mData{mParams}, mHmm{mData, mParams}
 {
+  setStorePerPairPosteriorMean(true);
 }
 
-ASMC::ASMC::ASMC(const std::string& inFileRoot, const std::string& decodingQuantFile, const std::string& outFileRoot)
+ASMC::ASMC::ASMC(const std::string& inFileRoot, const std::string& decodingQuantFile, const std::string& outFileRoot,
+                 const std::string& decodingMode)
     : mParams{inFileRoot,
               decodingQuantFile,
               outFileRoot.empty() ? inFileRoot : outFileRoot,
               1,
               1,
-              "array",
+              decodingMode,
               false,
               true,
               false,
@@ -46,6 +48,7 @@ ASMC::ASMC::ASMC(const std::string& inFileRoot, const std::string& decodingQuant
               true},
       mData{mParams}, mHmm{mData, mParams}
 {
+  setStorePerPairPosteriorMean(true);
 }
 
 DecodingReturnValues ASMC::ASMC::decodeAllInJob()
@@ -153,6 +156,11 @@ DecodePairsReturnStruct ASMC::ASMC::getCopyOfResults()
 const DecodePairsReturnStruct& ASMC::ASMC::getRefOfResults()
 {
   return mHmm.getDecodePairsReturnStruct();
+}
+
+const std::vector<float>& ASMC::ASMC::getExpectedTimes()
+{
+  return mHmm.getDecodingQuantities().expectedTimes;
 }
 
 void ASMC::ASMC::setStorePerPairPosteriorMean(bool storePerPairPosteriorMean)

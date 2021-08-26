@@ -385,7 +385,9 @@ void HMM::decodeAll(int jobs, int jobInd)
 
 void HMM::writeBinaryInfoIntoFile()
 {
+  const bool outputIbdScore = !decodingParams.hashingOnly;
   gzwrite(gzoutIBD, (char*)&decodingParams.outputIbdSegmentLength, sizeof(bool));
+  gzwrite(gzoutIBD, (char*)&outputIbdScore, sizeof(bool));
   gzwrite(gzoutIBD, (char*)&decodingParams.doPerPairPosteriorMean, sizeof(bool));
   gzwrite(gzoutIBD, (char*)&decodingParams.doPerPairMAP, sizeof(bool));
   gzwrite(gzoutIBD, (char*)&data.chrNumber, sizeof(int));
@@ -533,25 +535,11 @@ void HMM::closeIBDFile()
 
 void HMM::finishFromHashing()
 {
-  //  timerASMC.update_time();
-
-  if (!noBatches) {
+  if (!noBatches && !decodingParams.hashingOnly) {
     runLastBatch(batchObservations);
   }
 
   closeIBDFile();
-
-  // print some stats (will remove)
-  //  timeASMC += timerASMC.update_time();
-  //  double ticksDecodeAll = ticksForward + ticksBackward + ticksCombine + ticksOutputPerPair;
-  //  //printf("\n\n*** ASMC decoded %Ld pairs in %.3f seconds. ***\n\n", cpt, timeASMC);
-  //  printf("\n");
-  //  printPctTime("forward", ticksForward / ticksDecodeAll);
-  //  printPctTime("backward", ticksBackward / ticksDecodeAll);
-  //  printPctTime("combine", ticksCombine / ticksDecodeAll);
-  //  //printPctTime("sumOverPairs", ticksSumOverPairs / ticksDecodeAll);
-  //  printPctTime("outputPerPair", ticksOutputPerPair / ticksDecodeAll);
-  //  cout << flush;
 }
 
 // add pair to batch and run if we have enough
@@ -1111,7 +1099,7 @@ float HMM::getMAP(vector<float> posterior)
 
 // write an IBD segment into output file
 void HMM::writePairIBD(const PairObservations& obs, unsigned int posStart, unsigned int posEnd, float prob,
-                       vector<float>& posterior, int v, int paddedBatchSize)
+                       const vector<float>& posterior)
 {
   nbSegmentsDetected++;
   if (!decodingParams.BIN_OUT) {
@@ -1130,8 +1118,10 @@ void HMM::writePairIBD(const PairObservations& obs, unsigned int posStart, unsig
       record << '\t' << length_cM;
     }
 
-    const double ibd_score = prob / static_cast<double>(posEnd - posStart + 1u);
-    record << '\t' << ibd_score;
+    if (!decodingParams.hashingOnly) {
+      const double ibd_score = prob / static_cast<double>(posEnd - posStart + 1u);
+      record << '\t' << ibd_score;
+    }
 
     if (decodingParams.doPerPairPosteriorMean) {
       record << '\t' << getPosteriorMean(posterior);
@@ -1156,7 +1146,6 @@ void HMM::writePairIBD(const PairObservations& obs, unsigned int posStart, unsig
     int pos[2];
     pos[0] = data.physicalPositions[posStart];
     pos[1] = data.physicalPositions[posEnd];
-    const auto ibd_score = static_cast<float>(prob / static_cast<double>(posEnd - posStart + 1u));
     gzwrite(gzoutIBD, (char*)&ind[0], sizeof(unsigned int));
     gzwrite(gzoutIBD, &hap[0], sizeof(std::uint_least8_t));
     gzwrite(gzoutIBD, (char*)&ind[1], sizeof(unsigned int));
@@ -1167,7 +1156,10 @@ void HMM::writePairIBD(const PairObservations& obs, unsigned int posStart, unsig
       const float length_cM = 100.f * (data.geneticPositions[posEnd] - data.geneticPositions[posStart]);
       gzwrite(gzoutIBD, (char*)&length_cM, sizeof(float));
     }
-    gzwrite(gzoutIBD, (char*)&ibd_score, sizeof(float));
+    if (!decodingParams.hashingOnly) {
+      const auto ibd_score = static_cast<float>(prob / static_cast<double>(posEnd - posStart + 1u));
+      gzwrite(gzoutIBD, (char*)&ibd_score, sizeof(float));
+    }
     if (decodingParams.doPerPairPosteriorMean) {
       float postMean = getPosteriorMean(posterior);
       gzwrite(gzoutIBD, (char*)&postMean, sizeof(float));
@@ -1232,16 +1224,13 @@ void HMM::writePerPairOutputFastSMC(int actualBatchSize, int paddedBatchSize, co
           sum_posterior_per_state = posterior;
           if (pos > fromBatch[v] && isIBD1) {
             endIBD1 = pos - 1;
-            writePairIBD(obsBatch[v], startIBD1, endIBD1, posteriorIBD, prev_sum_posterior_per_state, v,
-                         paddedBatchSize);
+            writePairIBD(obsBatch[v], startIBD1, endIBD1, posteriorIBD, prev_sum_posterior_per_state);
           } else if (pos > fromBatch[v] && isIBD2) {
             endIBD2 = pos - 1;
-            writePairIBD(obsBatch[v], startIBD2, endIBD2, posteriorIBD, prev_sum_posterior_per_state, v,
-                         paddedBatchSize);
+            writePairIBD(obsBatch[v], startIBD2, endIBD2, posteriorIBD, prev_sum_posterior_per_state);
           } else if (pos > fromBatch[v] && isIBD3) {
             endIBD3 = pos - 1;
-            writePairIBD(obsBatch[v], startIBD3, endIBD3, posteriorIBD, prev_sum_posterior_per_state, v,
-                         paddedBatchSize);
+            writePairIBD(obsBatch[v], startIBD3, endIBD3, posteriorIBD, prev_sum_posterior_per_state);
           }
           posteriorIBD = sum;
         } else {
@@ -1249,7 +1238,7 @@ void HMM::writePerPairOutputFastSMC(int actualBatchSize, int paddedBatchSize, co
         }
         if (pos == toBatch[v] - 1) {
           endIBD = toBatch[v] - 1;
-          writePairIBD(obsBatch[v], startIBD, endIBD, posteriorIBD, sum_posterior_per_state, v, paddedBatchSize);
+          writePairIBD(obsBatch[v], startIBD, endIBD, posteriorIBD, sum_posterior_per_state);
           posteriorIBD = 0;
         }
         isIBD = true;
@@ -1260,15 +1249,13 @@ void HMM::writePerPairOutputFastSMC(int actualBatchSize, int paddedBatchSize, co
           sum_posterior_per_state = posterior;
           if (pos > fromBatch[v] && isIBD) {
             endIBD = pos - 1;
-            writePairIBD(obsBatch[v], startIBD, endIBD, posteriorIBD, prev_sum_posterior_per_state, v, paddedBatchSize);
+            writePairIBD(obsBatch[v], startIBD, endIBD, posteriorIBD, prev_sum_posterior_per_state);
           } else if (pos > fromBatch[v] && isIBD2) {
             endIBD2 = pos - 1;
-            writePairIBD(obsBatch[v], startIBD2, endIBD2, posteriorIBD, prev_sum_posterior_per_state, v,
-                         paddedBatchSize);
+            writePairIBD(obsBatch[v], startIBD2, endIBD2, posteriorIBD, prev_sum_posterior_per_state);
           } else if (pos > fromBatch[v] && isIBD3) {
             endIBD3 = pos - 1;
-            writePairIBD(obsBatch[v], startIBD3, endIBD3, posteriorIBD, prev_sum_posterior_per_state, v,
-                         paddedBatchSize);
+            writePairIBD(obsBatch[v], startIBD3, endIBD3, posteriorIBD, prev_sum_posterior_per_state);
           }
           posteriorIBD = sum;
         } else {
@@ -1276,7 +1263,7 @@ void HMM::writePerPairOutputFastSMC(int actualBatchSize, int paddedBatchSize, co
         }
         if (pos == toBatch[v] - 1) {
           endIBD1 = toBatch[v] - 1;
-          writePairIBD(obsBatch[v], startIBD1, endIBD1, posteriorIBD, sum_posterior_per_state, v, paddedBatchSize);
+          writePairIBD(obsBatch[v], startIBD1, endIBD1, posteriorIBD, sum_posterior_per_state);
           posteriorIBD = 0;
         }
         isIBD = false, isIBD2 = false, isIBD3 = false;
@@ -1287,15 +1274,13 @@ void HMM::writePerPairOutputFastSMC(int actualBatchSize, int paddedBatchSize, co
           sum_posterior_per_state = posterior;
           if (pos > fromBatch[v] && isIBD1) {
             endIBD1 = pos - 1;
-            writePairIBD(obsBatch[v], startIBD1, endIBD1, posteriorIBD, prev_sum_posterior_per_state, v,
-                         paddedBatchSize);
+            writePairIBD(obsBatch[v], startIBD1, endIBD1, posteriorIBD, prev_sum_posterior_per_state);
           } else if (pos > fromBatch[v] && isIBD) {
             endIBD = pos - 1;
-            writePairIBD(obsBatch[v], startIBD, endIBD, posteriorIBD, prev_sum_posterior_per_state, v, paddedBatchSize);
+            writePairIBD(obsBatch[v], startIBD, endIBD, posteriorIBD, prev_sum_posterior_per_state);
           } else if (pos > fromBatch[v] && isIBD3) {
             endIBD3 = pos - 1;
-            writePairIBD(obsBatch[v], startIBD3, endIBD3, posteriorIBD, prev_sum_posterior_per_state, v,
-                         paddedBatchSize);
+            writePairIBD(obsBatch[v], startIBD3, endIBD3, posteriorIBD, prev_sum_posterior_per_state);
           }
           posteriorIBD = sum;
         } else {
@@ -1303,7 +1288,7 @@ void HMM::writePerPairOutputFastSMC(int actualBatchSize, int paddedBatchSize, co
         }
         if (pos == toBatch[v] - 1) {
           endIBD2 = toBatch[v] - 1;
-          writePairIBD(obsBatch[v], startIBD2, endIBD2, posteriorIBD, sum_posterior_per_state, v, paddedBatchSize);
+          writePairIBD(obsBatch[v], startIBD2, endIBD2, posteriorIBD, sum_posterior_per_state);
           posteriorIBD = 0;
         }
         isIBD = false, isIBD1 = false, isIBD3 = false;
@@ -1314,15 +1299,13 @@ void HMM::writePerPairOutputFastSMC(int actualBatchSize, int paddedBatchSize, co
           sum_posterior_per_state = posterior;
           if (pos > fromBatch[v] && isIBD1) {
             endIBD1 = pos - 1;
-            writePairIBD(obsBatch[v], startIBD1, endIBD1, posteriorIBD, prev_sum_posterior_per_state, v,
-                         paddedBatchSize);
+            writePairIBD(obsBatch[v], startIBD1, endIBD1, posteriorIBD, prev_sum_posterior_per_state);
           } else if (pos > fromBatch[v] && isIBD) {
             endIBD = pos - 1;
-            writePairIBD(obsBatch[v], startIBD, endIBD, posteriorIBD, prev_sum_posterior_per_state, v, paddedBatchSize);
+            writePairIBD(obsBatch[v], startIBD, endIBD, posteriorIBD, prev_sum_posterior_per_state);
           } else if (pos > fromBatch[v] && isIBD2) {
             endIBD2 = pos - 1;
-            writePairIBD(obsBatch[v], startIBD2, endIBD2, posteriorIBD, prev_sum_posterior_per_state, v,
-                         paddedBatchSize);
+            writePairIBD(obsBatch[v], startIBD2, endIBD2, posteriorIBD, prev_sum_posterior_per_state);
           }
           posteriorIBD = sum;
         } else {
@@ -1330,7 +1313,7 @@ void HMM::writePerPairOutputFastSMC(int actualBatchSize, int paddedBatchSize, co
         }
         if (pos == toBatch[v] - 1) {
           endIBD3 = toBatch[v] - 1;
-          writePairIBD(obsBatch[v], startIBD3, endIBD3, posteriorIBD, sum_posterior_per_state, v, paddedBatchSize);
+          writePairIBD(obsBatch[v], startIBD3, endIBD3, posteriorIBD, sum_posterior_per_state);
           posteriorIBD = 0;
         }
         isIBD = false, isIBD1 = false, isIBD2 = false;
@@ -1338,19 +1321,19 @@ void HMM::writePerPairOutputFastSMC(int actualBatchSize, int paddedBatchSize, co
       } else {
         if (isIBD) {
           endIBD = pos - 1;
-          writePairIBD(obsBatch[v], startIBD, endIBD, posteriorIBD, prev_sum_posterior_per_state, v, paddedBatchSize);
+          writePairIBD(obsBatch[v], startIBD, endIBD, posteriorIBD, prev_sum_posterior_per_state);
           posteriorIBD = 0;
         } else if (isIBD1) {
           endIBD1 = pos - 1;
-          writePairIBD(obsBatch[v], startIBD1, endIBD1, posteriorIBD, prev_sum_posterior_per_state, v, paddedBatchSize);
+          writePairIBD(obsBatch[v], startIBD1, endIBD1, posteriorIBD, prev_sum_posterior_per_state);
           posteriorIBD = 0;
         } else if (isIBD2) {
           endIBD2 = pos - 1;
-          writePairIBD(obsBatch[v], startIBD2, endIBD2, posteriorIBD, prev_sum_posterior_per_state, v, paddedBatchSize);
+          writePairIBD(obsBatch[v], startIBD2, endIBD2, posteriorIBD, prev_sum_posterior_per_state);
           posteriorIBD = 0;
         } else if (isIBD3) {
           endIBD3 = pos - 1;
-          writePairIBD(obsBatch[v], startIBD3, endIBD3, posteriorIBD, prev_sum_posterior_per_state, v, paddedBatchSize);
+          writePairIBD(obsBatch[v], startIBD3, endIBD3, posteriorIBD, prev_sum_posterior_per_state);
           posteriorIBD = 0;
         }
         isIBD = false, isIBD1 = false, isIBD2 = false, isIBD3 = false;
@@ -1818,4 +1801,8 @@ bool HMM::getStorePerPairPosterior() const
 bool HMM::getStoreSumOfPosterior() const
 {
   return m_storeSumOfPosterior;
+}
+const DecodingParams& HMM::getDecodingParams() const
+{
+  return decodingParams;
 }
