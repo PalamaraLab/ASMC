@@ -25,13 +25,14 @@ ASMC::ASMC::ASMC(DecodingParams params) : mParams{std::move(params)}, mData{mPar
 {
 }
 
-ASMC::ASMC::ASMC(const std::string& inFileRoot, const std::string& decodingQuantFile, const std::string& outFileRoot)
+ASMC::ASMC::ASMC(const std::string& inFileRoot, const std::string& decodingQuantFile, const std::string& outFileRoot,
+                 const std::string& decodingMode)
     : mParams{inFileRoot,
               decodingQuantFile,
               outFileRoot.empty() ? inFileRoot : outFileRoot,
               1,
               1,
-              "array",
+              decodingMode,
               false,
               true,
               false,

@@ -223,7 +223,8 @@ PYBIND11_MODULE(asmc_python_bindings, m)
       .def("run", &ASMC::FastSMC::run);
   py::class_<ASMC::ASMC>(m, "ASMC")
       .def(py::init<DecodingParams>(), "decodingParams"_a)
-      .def(py::init<const std::string&, const std::string&>(), "in_dir"_a, "out_dir"_a)
+      .def(py::init<const std::string&, const std::string&, const std::string&, const std::string&>(), "in_dir"_a,
+           "dq_file"_a, "out_dir"_a = "", "decoding_mode"_a = "array")
       .def("decode_all_in_job", &ASMC::ASMC::decodeAllInJob)
       .def("decode_pairs", py::overload_cast<>(&ASMC::ASMC::decodePairs))
       .def("decode_pairs",

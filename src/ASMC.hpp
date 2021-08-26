@@ -51,7 +51,8 @@ public:
    * @param decodingQuantFile the decoding quantities file
    * @param outFileRoot the output file root, default to the input file root
    */
-  ASMC(const std::string& inFileRoot, const std::string& decodingQuantFile, const std::string& outFileRoot = "");
+  ASMC(const std::string& inFileRoot, const std::string& decodingQuantFile, const std::string& outFileRoot = "",
+       const std::string& decodingMode = "array");
 
   DecodingReturnValues decodeAllInJob();
 
