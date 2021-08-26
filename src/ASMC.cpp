@@ -155,6 +155,11 @@ const DecodePairsReturnStruct& ASMC::ASMC::getRefOfResults()
   return mHmm.getDecodePairsReturnStruct();
 }
 
+const std::vector<float>& ASMC::ASMC::getExpectedTimes()
+{
+  return mHmm.getDecodingQuantities().expectedTimes;
+}
+
 void ASMC::ASMC::setStorePerPairPosteriorMean(bool storePerPairPosteriorMean)
 {
   mHmm.setStorePerPairPosteriorMean(storePerPairPosteriorMean);

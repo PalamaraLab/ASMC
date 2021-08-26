@@ -30,13 +30,6 @@ TEST_CASE("test ASMC decodeAllInJob", "[ASMC]")
                         ASMC_DATA_DIR "/decoding_quantities/30-100-2000_CEU.decodingQuantities.gz");
 
   ASMC::ASMC asmc(params);
-
-  //  auto result = asmc.decodeAllInJob();
-  //
-  //  SECTION("test decode pair summarize")
-  //  {
-  //    REQUIRE(result.sumOverPairs.size() == 466440ul);
-  //  }
 }
 
 TEST_CASE("test ASMC decodePairs", "[ASMC]")
@@ -71,4 +64,14 @@ TEST_CASE("test ASMC decodePairs", "[ASMC]")
       REQUIRE((result.perPairPosteriors.at(idx).colwise().sum() - result.perPairPosteriorMeans.row(idx)).isZero(1e-2));
     }
   }
+}
+
+TEST_CASE("test other get methods", "[ASMC]")
+{
+  ASMC::ASMC asmc(ASMC_DATA_DIR "/examples/asmc/exampleFile.n300.array",
+                  ASMC_DATA_DIR "/decoding_quantities/30-100-2000_CEU.decodingQuantities.gz");
+
+  const std::vector<float>& expectedTimes = asmc.getExpectedTimes();
+  CHECK(expectedTimes.at(0) == Approx(14.999777896567f).margin(1e-5));
+  CHECK(expectedTimes.at(4) == Approx(135.698150766900f).margin(1e-5));
 }

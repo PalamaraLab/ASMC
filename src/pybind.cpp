@@ -236,6 +236,7 @@ PYBIND11_MODULE(asmc_python_bindings, m)
           "hap_ids_a"_a, "hap_ids_b"_a)
       .def("get_copy_of_results", &ASMC::ASMC::getCopyOfResults, py::return_value_policy::copy)
       .def("get_ref_of_results", &ASMC::ASMC::getRefOfResults, py::return_value_policy::reference_internal)
+      .def("get_expected_times", &ASMC::ASMC::getExpectedTimes, py::return_value_policy::reference_internal)
       .def("set_store_per_pair_posterior_mean", &ASMC::ASMC::setStorePerPairPosteriorMean,
            "store_per_pair_posterior_mean"_a = true)
       .def("set_write_per_pair_posterior_mean", &ASMC::ASMC::setWritePerPairPosteriorMean,

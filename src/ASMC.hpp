@@ -65,6 +65,8 @@ public:
 
   const DecodePairsReturnStruct& getRefOfResults();
 
+  const std::vector<float>& getExpectedTimes();
+
   /// Set to true to store per pair posterior mean
   void setStorePerPairPosteriorMean(bool storePerPairPosteriorMean = true);
 
