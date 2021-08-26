@@ -59,6 +59,7 @@ public:
   float min_maf = 0;
   float min_m = 1;
   bool hashing = false;
+  bool hashingOnly = false;
   bool FastSMC = false;
   bool BIN_OUT = false;
   bool useKnownSeed = false;

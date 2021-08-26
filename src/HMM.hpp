@@ -273,6 +273,11 @@ public:
    */
   void closeIBDFile();
 
+  /**
+   * Open the gzipped file stream for writing IBD data
+   */
+  void openIBDFile();
+
   void finishFromHashing();
 
   /**
@@ -304,6 +309,11 @@ public:
   bool getWritePerPairMap() const;
   bool getStorePerPairPosterior() const;
   bool getStoreSumOfPosterior() const;
+
+  void writePairIBD(const PairObservations& obs, unsigned int posStart, unsigned int posEnd, float prob = 0.f,
+                    const std::vector<float>& posterior = {});
+
+  const DecodingParams& getDecodingParams() const;
 
 private:
   void writeBinaryInfoIntoFile();
@@ -354,9 +364,6 @@ private:
   float getMAP(std::vector<float> posterior);
 
   float getPosteriorMean(const std::vector<float>& posterior);
-
-  void writePairIBD(const PairObservations& obs, unsigned int posStart, unsigned int posEnd, float prob,
-                    std::vector<float>& posterior, int v, int paddedBatchSize);
 
   // will eventually write binary output instead of gzipped
   void writePerPairOutput(int actualBatchSize, int paddedBatchSize, const std::vector<PairObservations>& obsBatch);

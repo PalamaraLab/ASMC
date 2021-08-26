@@ -20,6 +20,7 @@
 #include <boost/program_options.hpp>
 
 #include <fmt/core.h>
+#include <fmt/ostream.h>
 
 #include <exception>
 #include <filesystem>
@@ -223,6 +224,8 @@ bool DecodingParams::processCommandLineArgsFastSMC(int argc, char* argv[])
       //hashing options
       ("hashing", po::bool_switch(&hashing)->default_value(true),
        "Use of hashing to pre-process IBD segments [default 1/on]")
+      ("hashingOnly", po::bool_switch(&hashingOnly)->default_value(false),
+       "Only perform GERMLINE2 hashing, not ASMC decoding [default 0/off]")
       ("min_m", po::value<float>(&min_m)->default_value(1.0),
        "Minimum match length (in cM). [default = 1.0]")
       ("skip", po::value<float>(&skip)->default_value(0.0),
@@ -284,6 +287,21 @@ bool DecodingParams::validateParamsFastSMC()
         << "Attempting to validate FastSMC parameters but FastSMC flag is false. Set DecodingParams::FastSMC to true?"
         << std::endl;
     exit(1);
+  }
+
+  if (hashingOnly) {
+    if (!hashing) {
+      hashing = true;
+      fmt::print("Warning: {}hashingOnly set to true, but {}hashing set to false. Assuming {}hashing=true", del, del,
+                 del);
+    }
+    if (doPerPairMAP || doPerPairPosteriorMean) {
+      fmt::print("Warning: {}hashingOnly set to true which is incompatible with {}doPerPairMAP and "
+                 "{}doPerPairPosteriorMean. Turning those options off.",
+                 del, del, del);
+      doPerPairMAP = false;
+      doPerPairPosteriorMean = false;
+    }
   }
 
   if (hashing) {
