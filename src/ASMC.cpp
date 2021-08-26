@@ -23,6 +23,7 @@
 
 ASMC::ASMC::ASMC(DecodingParams params) : mParams{std::move(params)}, mData{mParams}, mHmm{mData, mParams}
 {
+  setStorePerPairPosteriorMean(true);
 }
 
 ASMC::ASMC::ASMC(const std::string& inFileRoot, const std::string& decodingQuantFile, const std::string& outFileRoot,
@@ -47,6 +48,7 @@ ASMC::ASMC::ASMC(const std::string& inFileRoot, const std::string& decodingQuant
               true},
       mData{mParams}, mHmm{mData, mParams}
 {
+  setStorePerPairPosteriorMean(true);
 }
 
 DecodingReturnValues ASMC::ASMC::decodeAllInJob()
