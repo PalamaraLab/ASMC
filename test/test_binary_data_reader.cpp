@@ -35,13 +35,14 @@ TEST_CASE("IbdPairDataLine default member test", "[BinaryDataReader]")
   REQUIRE(line.postEst == -1.f);
   REQUIRE(line.mapEst == -1.f);
 
-  REQUIRE(line.toString() == "0_00\t0_00\t-1\t0_00\t0_00\t-1\t-1\t-1\t-1\t-1");
+  REQUIRE(line.toString() == "0_00\t0_00\t-1\t0_00\t0_00\t-1\t-1\t-1\t-1");
 
+  line.ibdScore = 0.1;
   line.lengthInCentimorgans = 1.2;
   line.postEst = 2.3;
   line.mapEst = 3.4;
 
-  REQUIRE(line.toString() == "0_00\t0_00\t-1\t0_00\t0_00\t-1\t-1\t-1\t-1\t1.2\t-1\t2.3\t3.4");
+  REQUIRE(line.toString() == "0_00\t0_00\t-1\t0_00\t0_00\t-1\t-1\t-1\t-1\t1.2\t0.1\t2.3\t3.4");
 }
 
 TEST_CASE("BinaryDataReader real data test with decoding", "[BinaryDataReader]")
