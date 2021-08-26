@@ -44,9 +44,9 @@ TEST_CASE("IbdPairDataLine default member test", "[BinaryDataReader]")
   REQUIRE(line.toString() == "0_00\t0_00\t-1\t0_00\t0_00\t-1\t-1\t-1\t-1\t1.2\t-1\t2.3\t3.4");
 }
 
-TEST_CASE("BinaryDataReader real data test", "[BinaryDataReader]")
+TEST_CASE("BinaryDataReader real data test with decoding", "[BinaryDataReader]")
 {
-  BinaryDataReader dataReader(ASMC_DATA_DIR "/testing/asmc/binary_output.bibd.gz");
+  BinaryDataReader dataReader(ASMC_DATA_DIR "/testing/fastsmc/binary_output.bibd.gz");
 
   IbdPairDataLine line1 = dataReader.getNextLine();
   REQUIRE(line1.ind1FamId == "1_94");
@@ -59,9 +59,9 @@ TEST_CASE("BinaryDataReader real data test", "[BinaryDataReader]")
   REQUIRE(line1.ibdStart == 8740);
   REQUIRE(line1.ibdEnd == 1660011);
   REQUIRE(line1.lengthInCentimorgans == Approx(1.86962f).epsilon(1e-5));
-  REQUIRE(line1.ibdScore == Approx(0.403475f).epsilon(1e-5));
-  REQUIRE(line1.postEst == Approx(146.203f).epsilon(1e-5));
-  REQUIRE(line1.mapEst == Approx(24.9999f).epsilon(1e-5));
+  REQUIRE(line1.ibdScore == Approx(0.5073708f).epsilon(1e-5));
+  REQUIRE(line1.postEst == Approx(215.6709f).epsilon(1e-5));
+  REQUIRE(line1.mapEst == Approx(24.99997f).epsilon(1e-5));
 
   IbdPairDataLine line2 = dataReader.getNextLine();
   REQUIRE(line2.ind1FamId == "1_94");
@@ -74,9 +74,9 @@ TEST_CASE("BinaryDataReader real data test", "[BinaryDataReader]")
   REQUIRE(line2.ibdStart == 1679626);
   REQUIRE(line2.ibdEnd == 1679626);
   REQUIRE(line2.lengthInCentimorgans == Approx(0.f).epsilon(1e-5));
-  REQUIRE(line2.ibdScore == Approx(0.0175673f).epsilon(1e-5));
-  REQUIRE(line2.postEst == Approx(18029.8f).epsilon(1e-5));
-  REQUIRE(line2.mapEst == Approx(24.9999f).epsilon(1e-5));
+  REQUIRE(line2.ibdScore == Approx(0.02249517f).epsilon(1e-5));
+  REQUIRE(line2.postEst == Approx(25544.65f).epsilon(1e-5));
+  REQUIRE(line2.mapEst == Approx(24.99997f).epsilon(1e-5));
 
   int numLinesRead = 2;
   while (dataReader.moreLinesInFile()) {
@@ -84,5 +84,38 @@ TEST_CASE("BinaryDataReader real data test", "[BinaryDataReader]")
     numLinesRead++;
   }
 
-  REQUIRE(numLinesRead == 1520);
+  REQUIRE(numLinesRead == 1574);
+}
+
+TEST_CASE("BinaryDataReader real data test with only hashing", "[BinaryDataReader]")
+{
+  BinaryDataReader dataReader(ASMC_DATA_DIR "/testing/fastsmc/binary_output_hashing.bibd.gz");
+
+  dataReader.getNextLine();
+  dataReader.getNextLine();
+  dataReader.getNextLine();
+  dataReader.getNextLine();
+
+  IbdPairDataLine line5 = dataReader.getNextLine();
+  REQUIRE(line5.ind1FamId == "1_35");
+  REQUIRE(line5.ind1Id == "1_35");
+  REQUIRE(line5.ind1Hap == 1);
+  REQUIRE(line5.ind2FamId == "1_99");
+  REQUIRE(line5.ind2Id == "1_99");
+  REQUIRE(line5.ind2Hap == 2);
+  REQUIRE(line5.chromosome == 1);
+  REQUIRE(line5.ibdStart == 8740);
+  REQUIRE(line5.ibdEnd == 1572363);
+  REQUIRE(line5.lengthInCentimorgans == -1.f);  // default value when not in file
+  REQUIRE(line5.ibdScore == -1.f);  // default value when not in file
+  REQUIRE(line5.postEst == -1.f);  // default value when not in file
+  REQUIRE(line5.mapEst == -1.f);  // default value when not in file
+
+  int numLinesRead = 5;
+  while (dataReader.moreLinesInFile()) {
+    IbdPairDataLine line = dataReader.getNextLine();
+    numLinesRead++;
+  }
+
+  REQUIRE(numLinesRead == 495);
 }
