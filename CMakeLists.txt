@@ -95,11 +95,11 @@ set(ASMC_main
         )
 
 set(FastSMC_main
-        ${ASMC_source_dir}/main_fastsmc.cpp
+        ${ASMC_exe_dir}/main_fastsmc.cpp
         )
 
 set(convertBinary_main
-        ${ASMC_source_dir}/main_convertBinary.cpp
+        ${ASMC_exe_dir}/main_convertBinary.cpp
         )
 
 set(ASMC_unit_tests
