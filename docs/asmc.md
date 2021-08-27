@@ -1,11 +1,5 @@
 # ASMC
 
-- [Summary (TL;DR)](#summary-tldr)
-- [Running ASMC](#running-asmc)
-- [A complete example](#a-complete-example)
-- [Detailed command line options](#detailed-command-line-options)
-- [Input/output file formats](#inputoutput-file-formats)
-
 This page describes compiling and running the ASMC program described in [this paper](https://doi.org/10.1038/s41588-018-0177-x):
 
 - P. Palamara, J. Terhorst, Y. Song, A. Price. **High-throughput inference of pairwise coalescence times identifies signals of selection and enriched disease heritability.** *Nature Genetics*, 2018.

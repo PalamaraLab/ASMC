@@ -10,8 +10,8 @@ pip install asmc-asmc
 
 See the `notebooks` directory for examples.
 There are two Jupyter notebooks:
-- a [minimal working example](notebooks/fastsmc-minimal.ipynb), where sensible defaults for parameters are chosen automatically
-- a [more detailed example](notebooks/fastsmc.ipynb) that demonstrates how to customise parameters, how to convert the binary file to text format, and how to analyse the output if it is too large to fit in memory.
+- a [minimal working example](../notebooks/fastsmc-minimal.ipynb), where sensible defaults for parameters are chosen automatically
+- a [more detailed example](../notebooks/fastsmc.ipynb) that demonstrates how to customise parameters, how to convert the binary file to text format, and how to analyse the output if it is too large to fit in memory.
 
 ## API
 
@@ -62,6 +62,7 @@ params.time = 50
 params.noConditionalAgeEstimates = True
 params.doPerPairMAP = True
 params.doPerPairPosteriorMean = True
+params.hashingOnly = False
 ```
 
 Finally, you can validate that the parameters are consistent for running FastSMC:
