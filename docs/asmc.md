@@ -1,7 +1,3 @@
-+++
-title = "ASMC manual"
-+++
-
 # ASMC
 
 - [Summary (TL;DR)](#summary-tldr)
@@ -9,22 +5,11 @@ title = "ASMC manual"
 - [A complete example](#a-complete-example)
 - [Detailed command line options](#detailed-command-line-options)
 - [Input/output file formats](#inputoutput-file-formats)
-- [Tools and scripts](#tools-and-scripts)
-- [Precomputed decoding quantities](#precomputed-decoding-quantities)
-- [Change log](#change-log)
 
+This page describes compiling and running the ASMC program described in [this paper](https://doi.org/10.1038/s41588-018-0177-x):
 
-This page describes compiling and running the ASMC program described in the paper:
+- P. Palamara, J. Terhorst, Y. Song, A. Price. **High-throughput inference of pairwise coalescence times identifies signals of selection and enriched disease heritability.** *Nature Genetics*, 2018.
 
-{{% publication
-name="High-throughput inference of pairwise coalescence times identifies signals of selection and enriched disease heritability"
-authors="P. Palamara, J. Terhorst, Y. Song, A. Price"
-venue="Nature Genetics"
-url="https://www.nature.com/articles/s41588-018-0177-x"
-preprint="https://www.biorxiv.org/content/early/2018/03/07/276931"
-fulltext="https://rdcu.be/4sPF"
-date="August 2018"
-%}}
 
 A page with data and annotations from the paper can be found [here](https://palamaralab.github.io/software/asmc/data/).
 
@@ -33,25 +18,24 @@ A page with data and annotations from the paper can be found [here](https://pala
 The Ascertained Sequentially Markovian Coalescent is a method to efficiently estimate pairwise coalescence times along the genome.
 It can be run using SNP array or whole-genome sequencing (WGS) data.
 
-To run ASMC, download it [here](https://github.com/pierpal/ASMC), edit `ASMC/SRC/Makefile` to point to your Boost library headers and binaries, or install them using `sh getBoost.sh`.
-Compile ASMC using `sh build.sh`.
+To run ASMC, download it [here](https://github.com/PalamaraLab/ASMC), and follow the [quickstart guide](./quickstart_user.md).
+Compile the `ASMC_exe` target to build the ASMC executable.
 To compute pairwise coalescence times for the following files containing SNP array data for 150 phased diploid samples:
 
-- `FILES/EXAMPLE/exampleFile.n100.array.hap.gz`
-- `FILES/EXAMPLE/exampleFile.n100.array.samples`
-- `FILES/EXAMPLE/exampleFile.n100.array.map.gz`
+- `ASMC_data/examples/asmc/exampleFile.n300.array.hap.gz`
+- `ASMC_data/examples/asmc/exampleFile.n300.array.samples`
+- `ASMC_data/examples/asmc/exampleFile.n300.array.map.gz`
 
 (see [here](#inputoutput-file-formats) for file formats), you can run the following ASMC command:
 ```bash
-./ASMC \
-        --decodingQuantFile FILES/DECODING_QUANTITIES/30-100-2000.decodingQuantities.gz \
-        --hapsFileRoot FILES/EXAMPLE/exampleFile.n300.array \
+./build/ASMC_exe \
+        --decodingQuantFile ASMC_data/decoding_quantities/30-100-2000_CEU.decodingQuantities.gz \
+        --inFileRoot ASMC_data/examples/asmc/exampleFile.n300.array \
         --posteriorSums
 ```
 
-This will generate `FILES/EXAMPLE/exampleFile.n300.array.1-1.sumOverPairs.gz`, which contains a matrix of size SxD, where S is the number of sites in the data, and D is the number of discrete coalescence time intervals defined in `FILES/DISC/30-100-2000.disc`.
+This will generate `ASMC_data/examples/asmc/exampleFile.n300.array.1-1.sumOverPairs.gz`, which contains a matrix of size SxD, where S is the number of sites in the data, and D is the number of discrete coalescence time intervals defined in `FILES/DISC/30-100-2000.disc`.
 The [*i*,*j*]-th entry of this matrix contains the sum of posterior coalescence probabilities for all samples at SNP *i* and time *j*.
-A more detailed example is described [here](#a-complete-example).
 
 ### Running ASMC
 
@@ -59,8 +43,8 @@ Once you have computed or downloaded the decoding quantities corresponding to yo
 
 ```
 ./ASMC \
-        --decodingQuantFile FILES/EXAMPLE/exampleFile.n100.decodingQuantities.gz \
-        --hapsFileRoot FILES/EXAMPLE/exampleFile.n100.array \
+        --decodingQuantFile ASMC_data/decoding_quantities/30-100-2000_CEU.decodingQuantities.gz \
+        --inFileRoot ASMC_data/examples/asmc/exampleFile.n300.array \
         --majorMinorPosteriorSums
 ```
 
@@ -68,21 +52,23 @@ For WGS data, add the `--mode sequence` option:
 
 ```
 ./ASMC \
-        --decodingQuantFile FILES/EXAMPLE/exampleFile.n100.decodingQuantities.gz \
-        --hapsFileRoot FILES/EXAMPLE/exampleFile.n100 \
+        --decodingQuantFile ASMC_data/decoding_quantities/30-100-2000_CEU.decodingQuantities.gz \
+        --inFileRoot ASMC_data/examples/asmc/exampleFile.n300 \
         --majorMinorPosteriorSums \
         --mode sequence
 ```
 
-Using the `--majorMinorPosteriorSums` flag, ASMC will output the sum of posterior coalescence probabilities for all analyzed pairs of individuals. These will be written in `FILES/EXAMPLE/exampleFile.n100.array.{00,01,11}.sumOverPairs.gz` for the SNP array example, and `FILES/EXAMPLE/exampleFile.n100.{00,01,11}.sumOverPairs.gz` for the WGS example.
+Using the `--majorMinorPosteriorSums` flag, ASMC will output the sum of posterior coalescence probabilities for all analyzed pairs of individuals.
+These will be written in `ASMC_data/examples/asmc/exampleFile.n300.array.{00,01,11}.sumOverPairs.gz` for the SNP array example, and `ASMC_data/examples/asmc/exampleFile.n300.{00,01,11}.sumOverPairs.gz` for the WGS example.
 
-If you are decoding a large number of samples, you can break down the computation in several *jobs* using the `--jobs int` and `--jobInd int` flags, which take the total number of jobs to be performed and the current job index as arguments. If you don't speficy a name for the output files, a job index will be automatically added to the default output path. You can merge and normalize the results from all jobs using the `ASMCmergePosteriorSums` tool described [here](#tool-to-merge-output-of-parallel-asmc-jobs).
+If you are decoding a large number of samples, you can break down the computation in several *jobs* using the `--jobs int` and `--jobInd int` flags, which take the total number of jobs to be performed and the current job index as arguments.
+If you don't specify a name for the output files, a job index will be automatically added to the default output path.
 
 The full set of command line options for `ASMC` is as follows:
 
 ```
 Mandatory:
-  --hapsFileRoot arg            Prefix of hap|haps|hap.gz|haps.gz and sample|samples file
+  --inFileRoot arg              Prefix of hap|haps|hap.gz|haps.gz and sample|samples file
   --decodingQuantFile arg       Decoding quantities file
 
 Choose one of:
@@ -153,7 +139,7 @@ The intervals defined in this file are: `{0.0-1118.2, 1118.2-1472.2, 1472.2-1849
 
 The `*.decodingQuantities.gz` file is generated by `ASMCprepareDecoding` and input into `ASMC`. It is used to perform efficient inference of pairwise coalescence times. There is no need to understand the content of this file.
 
-### Time discretizzation intervals (\*.intervalsInfo)
+### Time discretization intervals (\*.intervalsInfo)
 
 The `*.intervalsInfo` file is generated by the `ASMCprepareDecoding` and input into `ASMC`. It contains some useful information about the time discretization and the demographic model. It contains a number of lines corresponding to the number of discrete time intervals used in the analysis. Each line has format:
 
@@ -170,17 +156,3 @@ The output of the `ASMC` analysis is written in `*.{00,01,11}.sumOverPairs.gz` f
 - The *i*-th row of the matrix in `*.00.sumOverPairs.gz` contains the sum of posterior probabilities for all pairs of samples that are homozygous `0` at site *i*.
 - The *i*-th row of the matrix in `*.01.sumOverPairs.gz` contains the sum of posterior probabilities for all pairs of samples that heterozygous at site *i*.
 - The *i*-th row of the matrix in `*.11.sumOverPairs.gz` contains the sum of posterior probabilities for all pairs of samples that are homozygous `1` at site *i*.
-
-## Tools and scripts
-
-These are some useful tools and scripts to be used with ASMC.
-
-### Tool to merge output of parallel ASMC jobs
-
-The folder `TOOLS/MERGE_POSTERIORS/` contains the `ASMCmergePosteriorSums.jar` program, which may be used to merge the output of different ASMC jobs. You can type `java -jar TOOLS/MERGE_POSTERIORS/ASMCmergePosteriorSums.jar  -h` for a list of command line options. Also see the `merge.sh` file. This tool assumes the decoding has been done using `--majorMinorPosteriorSums`. You may normalize the output so that the posterior sums to `1` for each site using the `--norm` flag. If you used the `--posteriorSums` flag and you want to simply normalize the output, you can run:
-
-```bash
-zcat FILES/EXAMPLE/exampleFile.n100.array.merged.sumOverPairs.gz | \
-    awk '{ c=0; for (i=1; i<=NF; i++) c+=$i; for (i=1; i<=NF; i++) $i/=c; print; }' | \
-    gzip -c -v - > FILES/EXAMPLE/exampleFile.n100.array.merged.norm.sumOverPairs.gz
-```
