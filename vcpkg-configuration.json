@@ -3,7 +3,7 @@
     {
       "kind": "git",
       "repository": "https://github.com/PalamaraLab/vcpkg-registry",
-      "baseline": "eb9e8646f833109a53f9857626620d139e05afa1",
+      "baseline": "368b5a15c672d8a440bef59cd60aa862fd601a77",
       "packages": [
         "asmc-data-module"
       ]
