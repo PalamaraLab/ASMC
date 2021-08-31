@@ -58,10 +58,10 @@ All necessary dependencies are already installed on ResComp. Simply follow these
 
 ```bash
 # Load required modules
-module load GCC/8.3.0
-module load CMake/3.15.3-GCCcore-8.3.0
-module load git/2.23.0-GCCcore-8.3.0-nodocs
-module load Python/3.7.4-GCCcore-8.3.0
+module load GCC/10.2.0
+module load CMake/3.18.4-GCCcore-10.2.0
+module load git/2.28.0-GCCcore-10.2.0-nodocs
+module load Python/3.8.6-GCCcore-10.2.0
 
 # Get the source
 git clone --recurse-submodules https://github.com/PalamaraLab/ASMC_dev
