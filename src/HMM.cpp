@@ -361,7 +361,7 @@ void HMM::decodeAll(int jobs, int jobInd)
     uint64 percentage = 100 * pairsJob / totPairsJob;
     if (percentage != lastPercentage) {
       cout << "\rDecoding progress: " << percentage << "%"
-           << "  (" << pairsJob << "/" << totPairsJob << ")### " << N << " ### " << totPairs << flush;
+           << "  (" << pairsJob << "/" << totPairsJob << ")" << flush;
     }
     lastPercentage = percentage;
   }

@@ -73,7 +73,7 @@ class TestASMCDecodingParams(unittest.TestCase):
         inFileRoot = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300.array')
         decodingQuantFile = str(data_dir / 'decoding_quantities' / '30-100-2000_CEU.decodingQuantities.gz')
         params = DecodingParams(inFileRoot, decodingQuantFile, compress=True,
-                                skipCSFSdistance=float('nan'))
+                                skip_CSFS_distance=float('nan'))
 
         self.assertEqual(params.compress, True)
         self.assertEqual(params.skipCSFSdistance, float('inf'))

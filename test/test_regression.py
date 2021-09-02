@@ -18,7 +18,7 @@ class TestASMCRegression(unittest.TestCase):
         in_file_root = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300.array')
         decoding_quant_file = str(data_dir / 'decoding_quantities' / '30-100-2000_CEU.decodingQuantities.gz')
 
-        params = DecodingParams(in_file_root, decoding_quant_file, doPosteriorSums=True)
+        params = DecodingParams(in_file_root, decoding_quant_file, do_posterior_sums=True)
 
         self.asmc = ASMC(params)
         self.asmc.set_store_per_pair_posterior_mean(True)

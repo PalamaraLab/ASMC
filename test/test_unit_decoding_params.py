@@ -23,15 +23,15 @@ class TestDecodingParams(unittest.TestCase):
 
     def test_sequence_folded(self):
         params = DecodingParams(self.inFileRoot, self.decodingQuantFile,
-                                compress=True, skipCSFSdistance=float('nan'),
-                                decodingModeString="sequence")
+                                compress=True, skip_CSFS_distance=float('nan'),
+                                decoding_mode_string="sequence")
         self.assertEqual(params.decodingMode, DecodingMode.sequenceFolded)
         self.assertEqual(params.compress, True)
 
     def test_sequence(self):
         params = DecodingParams(self.inFileRoot, self.decodingQuantFile,
-                                decodingModeString="sequence",
-                                useAncestral=True)
+                                decoding_mode_string="sequence",
+                                use_ancestral=True)
         self.assertEqual(params.decodingMode, DecodingMode.sequence)
 
 
