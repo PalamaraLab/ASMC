@@ -1,10 +1,22 @@
 # ASMC Release Notes
 
-## v1.2 (2021-08-??)
 
-All functionality for ASMC and FastSMC is now in [this repository](link???).
+## v1.2 (2021-09-??)
 
+All functionality for ASMC and FastSMC is now in this repository ([link](https://github.com/PalamaraLab/ASMC)).
 
+### Breaking changes
+
+- Fixed an issue with demographic models.
+  The `CEU.demo` demographic model and the decoding quantities for CEU+UKBB previously provided in the repository were mistakenly encoded as diploid rather than haploid. 
+  CEU.demo and CEU+UKBB decoding quantities have now been updated and can be found in [this repository](https://github.com/PalamaraLab/ASMC_data).
+  Also see the manual for a note on how this affects analyses.
+
+### Other changes
+
+- New API for decoding paris with ASMC.
+  In addition to running full analyses as described in the ASMC paper, users can now decode specific pairs and get back a variety of summary statistics.
+  See the [ASMC python documentation](https://github.com/PalamaraLab/ASMC/blob/main/docs/asmc_python.md) for details.
 
 
 ## v1.1 (2021-01-20)
@@ -29,6 +41,7 @@ No changes to any core functionality.
 - More robust checking is now used to verify the decoding quantities file is correct before reading it.
 - CMake will now, by default, build in Release mode (giving 03 optimisation on Linux).
   Previously, Debug was used by default.
+
 
 ## v1.0 (2020-09-18)
 

@@ -109,7 +109,18 @@ The demographic history provided in input to `ASMCprepareDecoding` represents a 
 TimeStart   PopulationSize
 ```
 
-Where TimeStart is the first generation where the population has size PopulationSize. Note that population size is *haploid*, and that the demographic model is usually built assuming a specific mutation rate, which is passed as an argument to the `ASMCprepareDecoding` program. The first line should contain generation `0`. You can obtain this model using e.g. PSMC/MSMC/SMC++. If your model is not piecewise constant, you will need to approximate it as piecewise constant. The last provided interval is assumed to last until time=Infinity (and is usually remote enough to have negligible effects on the results).
+Where TimeStart is the first generation where the population has size PopulationSize.
+Note that population size is *haploid*, and that the demographic model is usually built assuming a specific mutation rate, which is passed as an argument to the `ASMCprepareDecoding` program.
+The first line should contain generation `0`.
+You can obtain this model using e.g. PSMC/MSMC/SMC++.
+If your model is not piecewise constant, you will need to approximate it as piecewise constant.
+The last provided interval is assumed to last until time=Infinity (and is usually remote enough to have negligible effects on the results).
+
+The demographic models used with ASMC can be found [here](https://github.com/PalamaraLab/ASMC_data/tree/main/demographies) and were inferred using smc++ in the following paper:
+
+> Spence, J.P. and Song, Y.S. **Inference and analysis of population-specific fine-scale recombination maps across 26 diverse human populations.** _Science Advances_, Vol. 5, No. 10, eaaw9206 (2019), [[doi](https://doi.org/10.1126/sciadv.aaw9206)].
+
+They correspond to [these population sizes](https://github.com/popgenmethods/pyrho/blob/master/smcpp_popsizes_1kg.csv), but rescaled to assume mutation rate of 1.65e-8.
 
 ### Time discretization (\*.disc)
 
@@ -150,3 +161,57 @@ The output of the `ASMC` analysis is written in `*.{00,01,11}.sumOverPairs.gz` f
 - The *i*-th row of the matrix in `*.00.sumOverPairs.gz` contains the sum of posterior probabilities for all pairs of samples that are homozygous `0` at site *i*.
 - The *i*-th row of the matrix in `*.01.sumOverPairs.gz` contains the sum of posterior probabilities for all pairs of samples that heterozygous at site *i*.
 - The *i*-th row of the matrix in `*.11.sumOverPairs.gz` contains the sum of posterior probabilities for all pairs of samples that are homozygous `1` at site *i*.
+
+
+## Tools, scripts, and analyses
+
+These are some useful tools and scripts to be used with ASMC.
+They have not yet been relocated to this repository, but are standalone tools that are available at the indicated locations.
+
+### Tool to merge output of parallel ASMC jobs
+
+The folder [`MERGE_POSTERIORS`](https://github.com/PalamaraLab/ASMC_legacy/tree/master/TOOLS/MERGE_POSTERIORS) contains the `ASMCmergePosteriorSums.jar` program, which may be used to merge the output of different ASMC jobs.
+You can type 
+
+```
+java -jar TOOLS/MERGE_POSTERIORS/ASMCmergePosteriorSums.jar  -h
+```
+
+for a list of command line options.
+Also see the `merge.sh` file. This tool assumes the decoding has been done using `--majorMinorPosteriorSums`.
+You may normalize the output so that the posterior sums to `1` for each site using the `--norm` flag.
+If you used the `--posteriorSums` flag and you want to simply normalize the output, you can run:
+
+```bash
+zcat FILES/EXAMPLE/exampleFile.n100.array.merged.sumOverPairs.gz | \
+    awk '{ c=0; for (i=1; i<=NF; i++) c+=$i; for (i=1; i<=NF; i++) $i/=c; print; }' | \
+    gzip -c -v - > FILES/EXAMPLE/exampleFile.n100.array.merged.norm.sumOverPairs.gz
+```
+
+### Script to visualize average coalescence density in a region
+
+The folder [`PLOT_POSTERIORS`](https://github.com/PalamaraLab/ASMC_legacy/tree/master/TOOLS/PLOT_POSTERIORS) contains the `plotPosteriorHeatMap.py` program, which can be used to visualize the coalescence posterior density in specific regions (e.g. figures 3.b, 3.c, and S7 in the ASMC paper).
+For an example, see the [data](https://palamaralab.github.io/software/asmc/data/) page, where the [UKBB_posteriors](https://www.stats.ox.ac.uk/~palamara/ASMC/data/UKBB_posteriors.180813.tar) files can be downloaded to generate the figures from the paper.
+
+### Density of recent coalescence (DRC) statistic
+
+The DRC statistic can be obtained by summing entries of the `sumOverPairs` matrices that correspond to the desired time interval, and averaging across SNPs within a window.
+Please refer to the paper for details.
+
+A few notes on analyzing the DRC statistic: it is important to remember that using a Gamma distribution as a null model for the DRC statistic is an approximation (see paper), and further work is needed to derive an exact null model.
+In particular the DRC cannot be larger than 1, so approximate p-values obtained under a Gamma model for very large DRC values will be artificially small.
+We found the Gamma approximation to be reasonable under some conditions, such as a large recent effective population size, which makes the DRC small in neutral regions, but this approximation will not work well in all populations (e.g. isolated populations) or for large time intervals.
+If you decide to use this approach to detect candidate regions for selection, we recommend carefully checking that the Gamma approximation is reasonable.
+Because particularly large DRC values may lead to artificially small p-values, you may also want to use the Gamma approximation only to determine an approximate significance threshold, then report raw DRC values larger than this threshold, rather than reporting approximate p-values.
+
+Finally, we also suggest that you check that candidate regions detected this way do not overlap problematic regions of the genome, such as regions of very high/low recombination rate or LD, as well as large structural variants, such as inversions, which may affect recombination.
+
+
+## Precomputed decoding quantities
+
+[This repository](https://github.com/PalamaraLab/ASMC_data) contains various data files related to ASMC that users might find helpful.
+[This directory](https://github.com/PalamaraLab/ASMC_data/tree/main/decoding_quantities) contains two sets of decoding quantities that have been precomputed using the [PrepareDecoding tool](https://github.com/PalamaraLab/PrepareDecoding).
+
+They are built using the European demographic model [CEU.demo](https://github.com/PalamaraLab/ASMC_data/blob/main/demographies/CEU.demo), SNP allele frequencies from the UK Biobank in [UKBB.frq](https://github.com/PalamaraLab/ASMC_data/blob/main/frequencies/UKBB.frq), and the time discretizations that can be found in [this directory](https://github.com/PalamaraLab/ASMC_data/tree/main/discretizations).
+The discretizations contain several short time intervals in the recent generations, followed by intervals calculated from the mutation age distribution from generation `2,000` on.
+This enables getting more fine-grained information for recent generation, though note that smaller time intervals will contain fewer coalescent events on average.

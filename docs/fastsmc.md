@@ -127,4 +127,7 @@ The Ascertained Sequentially Markovian Coalescent is a method to efficiently est
 It can be run using SNP array or whole-genome sequencing (WGS) data.
 
 FastSMC builds on ASMC, and this repository can be used to run ASMC analysis.
-A user manual can be found [here](https://palamaralab.github.io/software/asmc/) and data and annotations from the ASMC paper can be found [here](https://palamaralab.github.io/software/asmc/data/).
+A user manual can be found [here](./asmc.md) and data and annotations from the ASMC paper can be found [here](https://palamaralab.github.io/software/asmc/data/).
+
+We don't currently provide scripts to automate some of the analyses described in the FastSMC paper.
+Some thoughts on the selection analysis may be found [here](./asmc.md#density-of-recent-coalescence-drc-statistic).
