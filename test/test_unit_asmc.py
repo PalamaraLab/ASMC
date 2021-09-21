@@ -105,10 +105,20 @@ class TestASMCDecodePairsAPI(unittest.TestCase):
 
         a = [1, 2, 3]
         b = [2, 3, 4]
-
         asmc.decode_pairs(a, b)
 
         return_vals = asmc.get_copy_of_results()
+
+        self.assertEqual(len(return_vals.per_pair_indices), 3)
+
+        # 0.1% margin in this test as the results can vary between pure and avx/sse
+        self.assertAlmostEqual(return_vals.per_pair_posterior_means[0, 0], 15968.91016, delta=15968.91016 * 0.001)
+        self.assertAlmostEqual(return_vals.per_pair_posterior_means[1, 8], 27963.49805, delta=27963.49805 * 0.001)
+        self.assertAlmostEqual(return_vals.per_pair_posterior_means[2, 29], 48573.32812, delta=48573.32812 * 0.001)
+
+        self.assertEqual(return_vals.per_pair_MAPs[0, 0], 29)
+        self.assertEqual(return_vals.per_pair_MAPs[1, 1234], 65)
+        self.assertEqual(return_vals.per_pair_MAPs[2, 7], 33)
 
         for posterior in return_vals.per_pair_posteriors:
             self.assertTrue(np.allclose(np.sum(posterior, axis=0), 1.0, 1e-2))
