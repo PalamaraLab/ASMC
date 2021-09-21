@@ -1,3 +1,5 @@
+import numpy as np
+
 import pathlib
 import sys
 import unittest
@@ -86,6 +88,30 @@ class TestASMCDecodingParams(unittest.TestCase):
         self.assertEqual(len(d), len(hmm.getDecodingQuantities().expectedTimes))
         for i in range(len(d)):
             self.assertEqual(len(d[i]), data.sites)
+
+
+class TestASMCDecodePairsAPI(unittest.TestCase):
+    def test_decode_pairs(self):
+
+        input_files_root = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300.array')
+        dq_file = str(data_dir / 'decoding_quantities' / '30-100-2000_CEU.decodingQuantities.gz')
+
+        asmc = ASMC(input_files_root, dq_file)
+
+        asmc.set_store_per_pair_posterior_mean(True)  # <-- true by default; others false by default
+        asmc.set_store_per_pair_map(True)
+        asmc.set_store_per_pair_posterior(True)
+        asmc.set_store_sum_of_posterior(True)
+
+        a = [1, 2, 3]
+        b = [2, 3, 4]
+
+        asmc.decode_pairs(a, b)
+
+        return_vals = asmc.get_copy_of_results()
+
+        for posterior in return_vals.per_pair_posteriors:
+            self.assertTrue(np.allclose(np.sum(posterior, axis=0), 1.0, 1e-2))
 
 
 if __name__ == "__main__":
