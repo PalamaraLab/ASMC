@@ -60,8 +60,9 @@ TEST_CASE("test ASMC decodePairs", "[ASMC]")
     REQUIRE(result.perPairMAPs(1, 1234) == 65);
     REQUIRE(result.perPairMAPs(2, 7) == 33);
 
+    // Check that the posteriors actually sum to one
     for (Eigen::Index idx = 0ll; idx < result.perPairPosteriors.size(); ++idx) {
-      REQUIRE((result.perPairPosteriors.at(idx).colwise().sum() - result.perPairPosteriorMeans.row(idx)).isZero(1e-2));
+      REQUIRE(result.perPairPosteriors.at(idx).colwise().sum().isOnes(1e-2));
     }
   }
 }

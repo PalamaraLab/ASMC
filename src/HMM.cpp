@@ -1365,8 +1365,8 @@ void HMM::writePerPairOutput(int actualBatchSize, int paddedBatchSize, const vec
       for (int k = 0; k < states; k++) {
         for (int batchIdx = 0; batchIdx < actualBatchSize; batchIdx++) {
           float posterior_pos_state_pair = m_alphaBuffer[(pos * states + k) * paddedBatchSize + batchIdx];
-          float postValue = posterior_pos_state_pair * expectedCoalTimes[k];
-          meanPost(batchIdx, pos) += postValue;
+          float postValue = posterior_pos_state_pair;
+          meanPost(batchIdx, pos) += postValue * expectedCoalTimes[k];
           if (m_storePerPairPosterior) {
             posteriors(batchIdx)(k, pos) = postValue;
           }
