@@ -175,10 +175,17 @@ void Data::readMap(const std::string& inFileRoot)
     physicalPositions.emplace_back(static_cast<int>(map.getPhysicalPositions().at(i)));
   }
 
+  // When calculating the recombination rates, note that it is possible to have consecutive entries in the map with
+  // identical physical & genetic positions. In this case we set the recombination rate to zero.
   for (auto i = 1ul; i < map.getNumSites(); ++i) {
     const float genDistFromPrevious = geneticPositions[i] - geneticPositions[i - 1];
     const float physDistFromPrevious = static_cast<float>(physicalPositions[i] - physicalPositions[i - 1]);
-    recRateAtMarker.at(i) = genDistFromPrevious / physDistFromPrevious;
+
+    if(genDistFromPrevious < std::numeric_limits<float>::epsilon()) {
+      recRateAtMarker.at(i) = 0.f;
+    } else {
+      recRateAtMarker.at(i) = genDistFromPrevious / physDistFromPrevious;
+    }
   }
 
   // Re-use the first rec rate in place zero
