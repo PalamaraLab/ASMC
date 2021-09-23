@@ -7,3 +7,6 @@
 [submodule "ASMC_data"]
 	path = ASMC_data
 	url = https://github.com/PalamaraLab/ASMC_data
+[submodule "DataModule"]
+	path = DataModule
+	url = https://github.com/PalamaraLab/DataModule/
