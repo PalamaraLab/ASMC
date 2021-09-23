@@ -1,4 +1,4 @@
-# This file is part of https://github.com/PalamaraLab/DataModule which is released under the GPL-3.0 license.
+# This file is part of https://github.com/PalamaraLab/ASMC which is released under the GPL-3.0 license.
 # See accompanying LICENSE and COPYING for copyright notice and full details.
 
 # If a VCPKG toolchain file is not defined, but the expected file exists, use it

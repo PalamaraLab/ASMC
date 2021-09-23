@@ -28,6 +28,7 @@ The C++ libraries and executables require:
 - Boost (1.62 or later)
 - Eigen (3.3.4 or later)
 - {fmt}
+- range-v3
 - OpenMP
 - zlib
 

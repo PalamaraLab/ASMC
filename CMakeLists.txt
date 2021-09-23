@@ -3,7 +3,12 @@
 
 cmake_minimum_required(VERSION 3.15)
 message(STATUS "CMake version: ${CMAKE_VERSION}")
-include(cmake/AutodetectVcpkgToolchainFile.cmake)
+
+include(cmake/CheckDataModule.cmake)
+
+if(NOT ASMC_AVOID_VCPKG)
+    include(cmake/AutodetectVcpkgToolchainFile.cmake)
+endif()
 
 project(asmc LANGUAGES CXX)
 
@@ -40,6 +45,7 @@ include(cmake/SIMD.cmake)
 set(ASMC_exe_dir ${CMAKE_CURRENT_SOURCE_DIR}/exe)
 set(ASMC_source_dir ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(ASMC_test_dir ${CMAKE_CURRENT_SOURCE_DIR}/test)
+set(ASMC_data_module_dir ${CMAKE_CURRENT_SOURCE_DIR}/DataModule)
 set(ASMC_data_dir ${CMAKE_CURRENT_SOURCE_DIR}/ASMC_data)
 add_definitions(-DASMC_TEST_DIR=\"${ASMC_test_dir}\")
 add_definitions(-DASMC_DATA_DIR=\"${ASMC_data_dir}\")
@@ -50,6 +56,25 @@ if (NOT EXISTS ${ASMC_data_dir}/README.md)
     message(STATUS "For testing functionality, please check out all submodules.")
     set(ASMC_TESTING OFF)
 endif ()
+
+set(ASMC_data_module_source
+        ${ASMC_data_module_dir}/src/GeneticMap.cpp
+        ${ASMC_data_module_dir}/src/PlinkMap.cpp
+        ${ASMC_data_module_dir}/src/utils/FileUtils.cpp
+        ${ASMC_data_module_dir}/src/utils/StringUtils.cpp
+        )
+
+set(ASMC_data_module_headers
+        ${ASMC_data_module_dir}/src/GeneticMap.hpp
+        ${ASMC_data_module_dir}/src/PlinkMap.hpp
+        ${ASMC_data_module_dir}/src/utils/FileUtils.hpp
+        ${ASMC_data_module_dir}/src/utils/StringUtils.hpp
+        ${ASMC_data_module_dir}/src/utils/VectorUtils.hpp
+        )
+
+# The ASMC Data Module library
+add_library(ASMC_data_module ${ASMC_data_module_source} ${ASMC_data_module_headers})
+target_include_directories(ASMC_data_module PUBLIC ${ASMC_data_module_dir}/src)
 
 set(ASMC_source
         ${ASMC_source_dir}/HMM.cpp
@@ -134,6 +159,7 @@ endif ()
 # The main ASMC library
 add_library(ASMC ${ASMC_source} ${ASMC_headers})
 target_include_directories(ASMC PUBLIC ${ASMC_source_dir})
+target_link_libraries(ASMC PRIVATE ASMC_data_module)
 
 # Link against std filesystem on GCC < 8.4
 if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -192,9 +218,9 @@ target_link_libraries(ASMC PRIVATE OpenMP::OpenMP_CXX)
 find_package(fmt CONFIG REQUIRED)
 target_link_libraries(ASMC PRIVATE fmt::fmt)
 
-# Might require the data module in future
-find_package(asmc-data-module CONFIG REQUIRED)
-target_link_libraries(ASMC PRIVATE asmc-data-module::data_module_lib)
+find_package(range-v3 CONFIG REQUIRED)
+message(STATUS "Found range-v3 ${range-v3_VERSION}")
+target_link_libraries(ASMC_data_module PRIVATE Eigen3::Eigen fmt::fmt range-v3 ZLIB::ZLIB)
 
 
 # Optionally run regression tests to ensure core functionality remains unchanged

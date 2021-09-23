@@ -56,3 +56,32 @@ mkdir build && cd build
 cmake -DASMC_NO_PYTHON=TRUE ..
 cmake --build . --parallel 4
 ```
+
+## Without vcpkg
+
+If you would like to compile ASMC without using [vcpkg](https://github.com/microsoft/vcpkg/) to handle dependencies, you should first ensure all dependencies are installed:
+
+**Ubuntu**
+```bash
+sudo apt install libboost-iostreams-dev libboost-math-dev libboost-program-options-dev libeigen3-dev libfmt-dev librange-v3-dev zlib1g-dev
+```
+
+**macOS**
+```bash
+brew install boost eigen fmt range-v3 zlib
+````
+
+Then, when you run CMake, add the following definition:
+
+```bash
+cmake -DASMC_AVOID_VCPKG=true ..
+```
+
+You may additionally choose to not recursively clone all submodules, as long as you still obtain the `DataModule` submodule.
+From the ASMC directory:
+
+```bash
+git clone https://github.com/PalamaraLab/ASMC
+cd ASMC
+git submodule update --init DataModule
+```
