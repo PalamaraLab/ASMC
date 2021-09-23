@@ -91,7 +91,7 @@ class TestASMCDecodingParams(unittest.TestCase):
 
 
 class TestASMCDecodePairsAPI(unittest.TestCase):
-    def test_decode_pairs(self):
+    def test_decode_pairs_array(self):
 
         input_files_root = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300.array')
         dq_file = str(data_dir / 'decoding_quantities' / '30-100-2000_CEU.decodingQuantities.gz')
@@ -119,6 +119,36 @@ class TestASMCDecodePairsAPI(unittest.TestCase):
         self.assertEqual(return_vals.per_pair_MAPs[0, 0], 29)
         self.assertEqual(return_vals.per_pair_MAPs[1, 1234], 65)
         self.assertEqual(return_vals.per_pair_MAPs[2, 7], 33)
+
+        for posterior in return_vals.per_pair_posteriors:
+            self.assertTrue(np.allclose(np.sum(posterior, axis=0), 1.0, 1e-2))
+
+    def test_decode_pairs_sequence(self):
+
+        input_files_root = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300')
+        dq_file = str(data_dir / 'decoding_quantities' / '30-100-2000_CEU.decodingQuantities.gz')
+
+        asmc = ASMC(input_files_root, dq_file, '', 'sequence')
+
+        asmc.set_store_per_pair_posterior_mean(True)  # <-- true by default; others false by default
+        asmc.set_store_per_pair_map(True)
+        asmc.set_store_per_pair_posterior(True)
+        asmc.set_store_sum_of_posterior(True)
+
+        a = [5, 6]
+        b = [7, 8]
+        asmc.decode_pairs(a, b)
+
+        return_vals = asmc.get_copy_of_results()
+
+        self.assertEqual(len(return_vals.per_pair_indices), 2)
+
+        # 0.1% margin in this test as the results can vary between pure and avx/sse
+        self.assertAlmostEqual(return_vals.per_pair_posterior_means[0, 0], 801.06647, delta=801.06647 * 0.001)
+        self.assertAlmostEqual(return_vals.per_pair_posterior_means[1, 8], 17953.60938, delta=17953.60938 * 0.001)
+
+        self.assertEqual(return_vals.per_pair_MAPs[0, 0], 16)
+        self.assertEqual(return_vals.per_pair_MAPs[1, 1234], 61)
 
         for posterior in return_vals.per_pair_posteriors:
             self.assertTrue(np.allclose(np.sum(posterior, axis=0), 1.0, 1e-2))

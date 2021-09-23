@@ -24,15 +24,7 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
-TEST_CASE("test ASMC decodeAllInJob", "[ASMC]")
-{
-  DecodingParams params(ASMC_DATA_DIR "/examples/asmc/exampleFile.n300.array",
-                        ASMC_DATA_DIR "/decoding_quantities/30-100-2000_CEU.decodingQuantities.gz");
-
-  ASMC::ASMC asmc(params);
-}
-
-TEST_CASE("test ASMC decodePairs", "[ASMC]")
+TEST_CASE("test ASMC decodePairsArray", "[ASMC]")
 {
   ASMC::ASMC asmc(ASMC_DATA_DIR "/examples/asmc/exampleFile.n300.array",
                   ASMC_DATA_DIR "/decoding_quantities/30-100-2000_CEU.decodingQuantities.gz");
@@ -59,6 +51,39 @@ TEST_CASE("test ASMC decodePairs", "[ASMC]")
     REQUIRE(result.perPairMAPs(0, 0) == 29);
     REQUIRE(result.perPairMAPs(1, 1234) == 65);
     REQUIRE(result.perPairMAPs(2, 7) == 33);
+
+    // Check that the posteriors actually sum to one
+    for (Eigen::Index idx = 0ll; idx < result.perPairPosteriors.size(); ++idx) {
+      REQUIRE(result.perPairPosteriors.at(idx).colwise().sum().isOnes(1e-2));
+    }
+  }
+}
+
+TEST_CASE("test ASMC decodePairsSequence", "[ASMC]")
+{
+  ASMC::ASMC asmc(ASMC_DATA_DIR "/examples/asmc/exampleFile.n300",
+                  ASMC_DATA_DIR "/decoding_quantities/30-100-2000_CEU.decodingQuantities.gz", "", "sequence");
+
+  asmc.setStorePerPairMap();
+  asmc.setStorePerPairPosterior();
+  asmc.setStorePerPairPosteriorMean();
+  asmc.setStorePerPairMap();
+
+  std::vector<unsigned long> indA = {5, 6};
+  std::vector<unsigned long> indB = {7, 8};
+  asmc.decodePairs(indA, indB);
+  auto result = asmc.getRefOfResults();
+
+  SECTION("test decode pair summarize")
+  {
+    REQUIRE(result.perPairIndices.size() == 2ul);
+
+    // 0.1% margin in this test as the results can vary between pure and avx/sse
+    REQUIRE(result.perPairPosteriorMeans(0, 0) == Approx(801.06647f).margin(801.06647f * 0.001f));
+    REQUIRE(result.perPairPosteriorMeans(1, 8) == Approx(17953.60938f).margin(17953.60938f * 0.001f));
+
+    REQUIRE(result.perPairMAPs(0, 0) == 16);
+    REQUIRE(result.perPairMAPs(1, 1234) == 61);
 
     // Check that the posteriors actually sum to one
     for (Eigen::Index idx = 0ll; idx < result.perPairPosteriors.size(); ++idx) {
