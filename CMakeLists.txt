@@ -5,7 +5,10 @@ cmake_minimum_required(VERSION 3.15)
 message(STATUS "CMake version: ${CMAKE_VERSION}")
 
 include(cmake/CheckDataModule.cmake)
-include(cmake/AutodetectVcpkgToolchainFile.cmake)
+
+if(NOT ASMC_AVOID_VCPKG)
+    include(cmake/AutodetectVcpkgToolchainFile.cmake)
+endif()
 
 project(asmc LANGUAGES CXX)
 

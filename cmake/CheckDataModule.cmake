@@ -8,7 +8,7 @@ The data module ${ASMC_data_module_dir} does not exist, and it is required for A
 Please either get all submodules when you clone ASMC:
 $ git clone --recurse-submodules https://github.com/PalamaraLab/ASMC.git
 or, at minimum, initialise the data module. From the ASMC directory:
-$ git submodule init DataModule
+$ git submodule update --init DataModule
 Please see this quickstart guide for further information:
 https://github.com/PalamaraLab/ASMC/blob/main/docs/quickstart_user.md
 ")
