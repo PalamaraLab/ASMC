@@ -16,7 +16,7 @@ jobs:
 
     steps:
 
-      - name: checkout repo & vcpkg submodule
+      - name: checkout repo & submodules
         uses: actions/checkout@v2
         with:
           submodules: true
