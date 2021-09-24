@@ -46,8 +46,8 @@ jobs:
     name: Upload wheels to PyPI
     needs: build-wheels
     runs-on: ubuntu-latest
-    if: github.event_name == 'release' && github.event.action == 'published'
-
+#    if: github.event_name == 'release' && github.event.action == 'published'
+    if:  ${{ github.repository == 'PalamaraLab/ASMC' }}
     steps:
       - uses: actions/setup-python@v2
 
