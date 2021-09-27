@@ -1,5 +1,11 @@
 # FastSMC Python API
 
+- [Examples using the Python bindings](#examples-using-the-python-bindings)
+- [API](#api)
+  - [FastSMC](#fastsmc)
+  - [DecodingParams](#decodingparams)
+  - [BinaryDataReader](#binarydatareader)
+
 FastSMC includes Python bindings which can be installed using pip:
 
 ```

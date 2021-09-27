@@ -1,5 +1,10 @@
 # Quickstart guide for users
 
+- [Python bindings](#python-bindings)
+- [Linux](#linux)
+- [macOS](#macos)
+- [Without vcpkg](#without-vcpkg)
+
 ## Python bindings
 
 If you want to use ASMC or FastSMC via their Python interface, you can simply install ASMC using pip:

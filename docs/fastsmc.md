@@ -1,5 +1,13 @@
 # FastSMC
 
+- [Running FastSMC](#running-fastsmc)
+	- [Detailed command line options](#detailed-command-line-options)
+	- [Input file formats](#input-file-formats)
+	- [Output format](#output-format)
+	- [Binary output](#binary-output)
+	- [Example using the compiled FastSMC executable (C++)](#example-using-the-compiled-fastsmc-executable-c)
+- [Relationship to ASMC](#relationship-to-asmc)
+
 The Fast Sequentially Markovian Coalescent (FastSMC) algorithm is an extension to the ASMC algorithm, adding an identification step by hashing (currently using an improved version of the GERMLINE algorithm).
 FastSMC is an accurate method to detect Identical-By-Descent segments which enables estimating the time to most recent common ancestor for IBD individuals, and provides an estimate of uncertainty for detected IBD regions.
 
@@ -7,10 +15,11 @@ FastSMC is an accurate method to detect Identical-By-Descent segments which enab
 
 ## Running FastSMC
 
-You can run FastSMC as a C++ compiled executable or using Python (see [here](./fastsmc_python.md) for examples).
+You can run FastSMC as a C++ compiled executable or using [Python bindings](./fastsmc_python.md).
+Follow this [quickstart guide](./quickstart_user.md) for information on compiling the FastSMC targets.
 
 ### Detailed command line options
-See ASMC's documentation for parameters related to the validation step. Additional parameters related to the identification step are listed below.
+See the [ASMC documentation](./asmc.md) for parameters related to the validation step. Additional parameters related to the identification step are listed below.
 Note: default parameter values are likely to change in future versions.
 
 ```
@@ -49,13 +58,15 @@ Note: default parameter values are likely to change in future versions.
 				[default off]
   --batchSize			Size of batches to be decoded.
 				[default = 32]
+  --hashingOnly Only perform GERMLINE2 hashing, not ASMC decoding
+  				[default off]
 ```
 
 Suggested optimal parameters for IBD detection within the past 25, 50, 100, 150 and 200 generations are provided in the FastSMC paper.
 
 ### Input file formats
 
-Input files are provided to FastSMC with the --inFileRoot option. You may want to look at files in FILES/FASTSMC_EXAMPLE/* for examples of the file formats described below.
+Input files are provided to FastSMC with the --inFileRoot option. You may want to look at files in `ASMC_data` for examples of the file formats described below.
 
 #### Phased haplotypes in Oxford haps/sample format (.hap/.hap.gz, .samples)
 These files are provided in input to FastSMC. The file format explained [here](https://www.cog-genomics.org/plink/2.0/formats#haps). These files are output by phasing programs like Eagle and Shapeit.
@@ -67,7 +78,7 @@ The second column may contain any values.
 The file may be optionally compressed using gzip.
 
 #### Decoding quantities (.decodingQuantities.gz)
-See the instructions above to generate decoding quantities files and the ASMC manual [here](https://palamaralab.github.io/software/asmc/) for more details.
+See the instructions above to generate decoding quantities files and the [ASMC manual](./asmc.md#decoding-quantities-decodingquantitiesgz) for more details.
 
 ### Output format
 
@@ -94,10 +105,10 @@ If you use the --bin option, FastSMC will generate a compressed binary (.bib.gz)
 
 ### Example using the compiled FastSMC executable (C++)
 
-Following the compilation instructions above will create an executable
+Following the compilation instructions in the [quickstart guide](./quickstart_user.md) will create an executable
 
 ```
-FASTSMC_BUILD_DIR/FastSMC_exe
+build/FastSMC_exe
 ```
 
 which can be used by providing command line arguments summarised above.
