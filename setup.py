@@ -102,8 +102,11 @@ class CMakeBuild(build_ext):
         )
 
 
-with open("README.md", encoding="utf-8") as f:
-    readme = f.read()
+with open('PyPI_README.md', encoding='utf-8') as f:
+    long_description = f.read()
+
+with open('RELEASE_NOTES.md', encoding='utf-8') as f:
+    release_notes = f.read()
 
 setup(
     name='asmc-asmc',
@@ -111,9 +114,9 @@ setup(
     author='PalamaraLab (https://palamaralab.github.io/)',
     description='ASMC is a method to efficiently estimate pairwise coalescence time along the genome',
     url='https://github.com/PalamaraLab/ASMC/',
-    python_requires=">=3.5",
+    python_requires=">=3.6",
     packages=find_namespace_packages(include=['asmc.*']),
-    long_description=readme,
+    long_description='\n'.join([long_description, release_notes]),
     long_description_content_type="text/markdown",
     install_requires=['jupyter', 'numpy', 'pandas', 'asmc-preparedecoding', 'matplotlib'],
     ext_modules=[CMakeExtension('asmc/asmc')],

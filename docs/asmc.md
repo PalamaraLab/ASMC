@@ -1,5 +1,21 @@
 # ASMC
 
+- [Summary (TL;DR)](#summary-tldr)
+  - [Running ASMC](#running-asmc)
+- [Input/output file formats](#inputoutput-file-formats)
+  - [Phased haplotypes in Oxford haps/sample format (\*.hap/hap.gz, samples)](#phased-haplotypes-in-oxford-hapssample-format-haphapgz-samples)
+  - [Genetic map (\*.map/map.gz)](#genetic-map-mapmapgz)
+  - [Demographic history (\*.demo)](#demographic-history-demo)
+  - [Time discretization (\*.disc)](#time-discretization-disc)
+  - [Decoding quantities (\*.decodingQuantities.gz)](#decoding-quantities-decodingquantitiesgz)
+  - [Time discretization intervals (\*.intervalsInfo)](#time-discretization-intervals-intervalsinfo)
+  - [Sum of pairwise posterior coalescence probabilities `*.sumOverPairs.gz`](#sum-of-pairwise-posterior-coalescence-probabilities-sumoverpairsgz)
+- [Tools, scripts, and analyses](#tools-scripts-and-analyses)
+  - [Tool to merge output of parallel ASMC jobs](#tool-to-merge-output-of-parallel-asmc-jobs)
+  - [Script to visualize average coalescence density in a region](#script-to-visualize-average-coalescence-density-in-a-region)
+  - [Density of recent coalescence (DRC) statistic](#density-of-recent-coalescence-drc-statistic)
+- [Precomputed decoding quantities](#precomputed-decoding-quantities)
+
 This page describes compiling and running the ASMC program described in [this paper](https://doi.org/10.1038/s41588-018-0177-x):
 
 - P. Palamara, J. Terhorst, Y. Song, A. Price. **High-throughput inference of pairwise coalescence times identifies signals of selection and enriched disease heritability.** *Nature Genetics*, 2018.
@@ -28,7 +44,7 @@ To compute pairwise coalescence times for the following files containing SNP arr
         --posteriorSums
 ```
 
-This will generate `ASMC_data/examples/asmc/exampleFile.n300.array.1-1.sumOverPairs.gz`, which contains a matrix of size SxD, where S is the number of sites in the data, and D is the number of discrete coalescence time intervals defined in `FILES/DISC/30-100-2000.disc`.
+This will generate `ASMC_data/examples/asmc/exampleFile.n300.array.1-1.sumOverPairs.gz`, which contains a matrix of size SxD, where S is the number of sites in the data, and D is the number of discrete coalescence time intervals defined in `ASMC_data/discretizations/30-100-2000_CEU.disc`.
 The [*i*,*j*]-th entry of this matrix contains the sum of posterior coalescence probabilities for all samples at SNP *i* and time *j*.
 
 ### Running ASMC
@@ -36,7 +52,7 @@ The [*i*,*j*]-th entry of this matrix contains the sum of posterior coalescence 
 Once you have computed or downloaded the decoding quantities corresponding to your demographic model, time discretization, and SNP allele frequencies, you can analyze SNP or WGS data using the `ASMC` program:
 
 ```
-./ASMC \
+./build/ASMC_exe \
         --decodingQuantFile ASMC_data/decoding_quantities/30-100-2000_CEU.decodingQuantities.gz \
         --inFileRoot ASMC_data/examples/asmc/exampleFile.n300.array \
         --majorMinorPosteriorSums
@@ -45,7 +61,7 @@ Once you have computed or downloaded the decoding quantities corresponding to yo
 For WGS data, add the `--mode sequence` option:
 
 ```
-./ASMC \
+./build/ASMC_exe \
         --decodingQuantFile ASMC_data/decoding_quantities/30-100-2000_CEU.decodingQuantities.gz \
         --inFileRoot ASMC_data/examples/asmc/exampleFile.n300 \
         --majorMinorPosteriorSums \
@@ -90,7 +106,7 @@ In addition to the arguments described above, `ASMC` options include:
 
 ## Input/output file formats
 
-You may want to look at files in FILES/\* for examples of the file formats described below.
+You may want to look at files in `ASMC_data/` for examples of the file formats described below.
 
 ### Phased haplotypes in Oxford haps/sample format (\*.hap/hap.gz, samples)
 
@@ -124,25 +140,39 @@ They correspond to [these population sizes](https://github.com/popgenmethods/pyr
 
 ### Time discretization (\*.disc)
 
-The list of discrete time intervals provided in input to `ASMC` contains a single number per line, representing time measured in (continuous) generations, and starting at generation `0.0`. For instance, the list `FILES/DISC/10.disc` contains 10 time intervals:
+The list of discrete time intervals provided in input to `ASMC` contains a single number per line, representing time measured in (continuous) generations, and starting at generation `0.0`. For instance, the list `ASMC_data/discretizations/30-100-2000_CEU.disc` contains time intervals:
 ```
 0.0
-1118.2
-1472.2
-1849.7
-2497.0
-3963.8
-9120.8
-15832.9
-24139.9
-34891.6
+30.0
+60.0
+90.0
+120.0
+150.0
+180.0
+210.0
+240.0
+270.0
+300.0
+330.0
+360.0
+... <lines omitted>
+79855.6
+96263.0
+124311.7
 ```
 
-The intervals defined in this file are: `{0.0-1118.2, 1118.2-1472.2, 1472.2-1849.7, 1849.7-2497.0, 2497.0-3963.8, 3963.8-9120.8, 9120.8-15832.9, 15832.9-24139.9, 24139.9-34891.6, 34891.6-Infinity}`.
+The intervals defined in this file are: `{0.0-30.0, 30.0-60.0, ..., 96263.0-124311.7, 124311.7-Infinity}`.
 
 ### Decoding quantities (\*.decodingQuantities.gz)
 
-The `*.decodingQuantities.gz` file is generated by `ASMCprepareDecoding` and input into `ASMC`. It is used to perform efficient inference of pairwise coalescence times. There is no need to understand the content of this file.
+The `*.decodingQuantities.gz` file is generated by `ASMCprepareDecoding` and input into `ASMC`.
+It is used to perform efficient inference of pairwise coalescence times. There is no need to understand the content of this file.
+
+Note: the CEU.demo demographic model and the decoding quantities for CEU+UKBB previously provided in [this repository](https://github.com/PalamaraLab/FastSMC) and [this repository](https://github.com/PalamaraLab/ASMC_legacy) were mistakenly encoded as diploid rather than haploid.
+The file [CEU.demo](https://github.com/PalamaraLab/ASMC_data/tree/main/demographies) and CEU+UKBB decoding quantities [here](https://github.com/PalamaraLab/ASMC_data/tree/main/decoding_quantities) have now been fixed.
+They were generated using v2.2.1 of the [PrepareDecoding tool](https://github.com/PalamaraLab/PrepareDecoding/releases/tag/v2.2.1), which also provides a simpler interface for computing decoding quantities as well as support for additional demographic models.
+Using these new decoding quantities with v1.2 of ASMC will tend to produce more recent estimates for TMRCAs compared to the decoding quantities distributed with v1.0 and v1.1.
+This should not have a substantial impact on most downstream analyses.
 
 ### Time discretization intervals (\*.intervalsInfo)
 
@@ -183,9 +213,9 @@ You may normalize the output so that the posterior sums to `1` for each site usi
 If you used the `--posteriorSums` flag and you want to simply normalize the output, you can run:
 
 ```bash
-zcat FILES/EXAMPLE/exampleFile.n100.array.merged.sumOverPairs.gz | \
+zcat path/to/output/exampleFile.n100.array.merged.sumOverPairs.gz | \
     awk '{ c=0; for (i=1; i<=NF; i++) c+=$i; for (i=1; i<=NF; i++) $i/=c; print; }' | \
-    gzip -c -v - > FILES/EXAMPLE/exampleFile.n100.array.merged.norm.sumOverPairs.gz
+    gzip -c -v - > path/to/output/exampleFile.n100.array.merged.norm.sumOverPairs.gz
 ```
 
 ### Script to visualize average coalescence density in a region

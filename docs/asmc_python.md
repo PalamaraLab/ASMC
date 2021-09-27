@@ -1,10 +1,23 @@
 # ASMC Python API
 
-FastSMC includes Python bindings which can be installed using pip:
+- [Examples using the Python bindings](#examples-using-the-python-bindings)
+- [API](#api)
+  - [ASMC](#asmc)
+  - [DecodePairsReturnStruct](#decodepairsreturnstruct)
+
+ASMC includes Python bindings which can be installed using pip:
 
 ```
 pip install asmc-asmc
 ```
+
+Before reading further you may wish to read the [ASMC docs](./asmc.md).
+In particular, these sections are directly relevant:
+- [Summary (TL;DR)](./asmc.md#summary-tldr)
+- [Input/output file formats](./asmc.md#inputoutput-file-formats)
+- [Tools, scripts, and analyses](./asmc.md#tools-scripts-and-analyses)
+- [Precomputed decoding quantities](./asmc.md#precomputed-decoding-quantities)
+
 
 ## Examples using the Python bindings
 

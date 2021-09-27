@@ -1,5 +1,10 @@
 # Quickstart guide for developers
 
+- [Linux](#linux)
+- [macOS](#macos)
+- [ResComp (oxford research computing)](#rescomp-oxford-research-computing)
+- [Python bindings](#python-bindings)
+
 ## Linux
 
 This guide assumes you have a C++17 compatible compiler (e.g. gcc >= 8.3 or clang >= 7) and [CMake >= 3.15](https://cmake.org/install/).
