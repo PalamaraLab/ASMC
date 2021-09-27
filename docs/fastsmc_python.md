@@ -12,6 +12,16 @@ FastSMC includes Python bindings which can be installed using pip:
 pip install asmc-asmc
 ```
 
+Before reading further you may wish to read the [FastSMC docs](./fastsmc.md).
+In particular, these sections are directly relevant:
+- [Summary (TL;DR)](./fastsmc.md#input-file-formats)
+- [Input/output file formats](./fastsmc.md#output-format)
+- [Tools, scripts, and analyses](./fastsmc.md#binary-output)
+- [Precomputed decoding quantities](./fastsmc.md#relationship-to-asmc)
+
+And, from the [ASMC docs](./asmc.md):
+- [Precomputed decoding quantities](./asmc.md#precomputed-decoding-quantities)
+
 ## Examples using the Python bindings
 
 See the `notebooks` directory for examples.

@@ -11,12 +11,12 @@ ASMC includes Python bindings which can be installed using pip:
 pip install asmc-asmc
 ```
 
-Before reading further you may wish to read the ASMC manual.
+Before reading further you may wish to read the [ASMC docs](./asmc.md).
 In particular, these sections are directly relevant:
-- [Summary (TL;DR)](https://github.com/PalamaraLab/ASMC/blob/main/docs/asmc.md#summary-tldr)
-- [Input/output file formats](https://github.com/PalamaraLab/ASMC/blob/main/docs/asmc.md#inputoutput-file-formats)
-- [Tools, scripts, and analyses](https://github.com/PalamaraLab/ASMC/blob/main/docs/asmc.md#tools-scripts-and-analyses)
-- [Precomputed decoding quantities](https://github.com/PalamaraLab/ASMC/blob/main/docs/asmc.md#precomputed-decoding-quantities)
+- [Summary (TL;DR)](./asmc.md#summary-tldr)
+- [Input/output file formats](./asmc.md#inputoutput-file-formats)
+- [Tools, scripts, and analyses](./asmc.md#tools-scripts-and-analyses)
+- [Precomputed decoding quantities](./asmc.md#precomputed-decoding-quantities)
 
 
 ## Examples using the Python bindings
