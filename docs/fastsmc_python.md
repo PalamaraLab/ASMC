@@ -81,6 +81,9 @@ params.doPerPairPosteriorMean = True
 params.hashingOnly = False
 ```
 
+> Note: the `hashingOnly` flag has not been extensively tested.
+You may also want to look into [this repository](https://github.com/gusevlab/germline2) for a standalone version.
+
 Finally, you can validate that the parameters are consistent for running FastSMC:
 
 ```python

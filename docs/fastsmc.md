@@ -62,6 +62,9 @@ Note: default parameter values are likely to change in future versions.
   				[default off]
 ```
 
+> Note: the `hashingOnly` flag has not been extensively tested.
+You may also want to look into [this repository](https://github.com/gusevlab/germline2) for a standalone version.
+
 Suggested optimal parameters for IBD detection within the past 25, 50, 100, 150 and 200 generations are provided in the FastSMC paper.
 
 ### Input file formats
