@@ -1,7 +1,7 @@
 # ASMC Release Notes
 
 
-## v1.2 (2021-09-??)
+## v1.2 (2021-09-28)
 
 All functionality for ASMC and FastSMC is now in this repository ([link](https://github.com/PalamaraLab/ASMC)).
 
@@ -14,9 +14,10 @@ All functionality for ASMC and FastSMC is now in this repository ([link](https:/
 
 ### Other changes
 
-- New API for decoding paris with ASMC.
+- New API for decoding pairs with ASMC.
   In addition to running full analyses as described in the ASMC paper, users can now decode specific pairs and get back a variety of summary statistics.
   See the [ASMC python documentation](https://github.com/PalamaraLab/ASMC/blob/main/docs/asmc_python.md) for details.
+- New, more extensive, [documentation](https://github.com/PalamaraLab/ASMC/blob/main/docs/) is available.
 
 
 ## v1.1 (2021-01-20)

@@ -110,7 +110,7 @@ with open('RELEASE_NOTES.md', encoding='utf-8') as f:
 
 setup(
     name='asmc-asmc',
-    version='1.0',
+    version='1.2',
     author='PalamaraLab (https://palamaralab.github.io/)',
     description='ASMC is a method to efficiently estimate pairwise coalescence time along the genome',
     url='https://github.com/PalamaraLab/ASMC/',
