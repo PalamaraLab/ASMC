@@ -177,7 +177,7 @@ TEST_CASE("test FastSMC without hashing regression test", "[FastSMC_regression]"
   params.jobs = 25;
   params.useKnownSeed = true;
 
-  assert(params.validateParamsFastSMC());
+  params.validateParamsFastSMC();
 
   ASMC::FastSMC fastSMC(params);
   fastSMC.run();
