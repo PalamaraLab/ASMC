@@ -49,7 +49,6 @@ class TestFastSMCRegression(unittest.TestCase):
         self.params.inFileRoot = str(data_dir / 'examples' / 'fastsmc' / 'example')
         self.params.outFileRoot = '/tmp/FastSMCresults'
         self.params.decodingModeString = 'array'
-        self.params.foldData = True
         self.params.usingCSFS = True
         self.params.batchSize = 32
         self.params.recallThreshold = 3
@@ -87,7 +86,6 @@ class TestFastSMCRegressionWithoutHashing(unittest.TestCase):
         self.params.inFileRoot = str(data_dir / 'examples' / 'fastsmc' / 'example')
         self.params.outFileRoot = '/tmp/FastSMCresults'
         self.params.decodingModeString = 'array'
-        self.params.foldData = True
         self.params.usingCSFS = True
         self.params.batchSize = 32
         self.params.recallThreshold = 3

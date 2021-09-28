@@ -32,7 +32,6 @@ TEST_CASE("test FastSMC with hashing regression test", "[FastSMC_regression]")
   params.inFileRoot = ASMC_DATA_DIR "/examples/fastsmc/example";
   params.outFileRoot = "/tmp/FastSMC";
   params.decodingModeString = "array";
-  params.foldData = true;
   params.usingCSFS = true;
   params.batchSize = 32;
   params.recallThreshold = 3;
@@ -97,7 +96,6 @@ TEST_CASE("test FastSMC with hashing only (GERMLINE2)", "[FastSMC_regression]")
   params.inFileRoot = ASMC_DATA_DIR "/examples/fastsmc/example";
   params.outFileRoot = "/tmp/FastSMCHashing";
   params.decodingModeString = "array";
-  params.foldData = true;
   params.usingCSFS = true;
   params.batchSize = 32;
   params.recallThreshold = 3;
@@ -163,7 +161,6 @@ TEST_CASE("test FastSMC without hashing regression test", "[FastSMC_regression]"
   params.inFileRoot = ASMC_DATA_DIR "/examples/fastsmc/example";
   params.outFileRoot = "/tmp/FastSMCresults";
   params.decodingModeString = "array";
-  params.foldData = true;
   params.usingCSFS = true;
   params.batchSize = 32;
   params.recallThreshold = 3;
@@ -180,7 +177,7 @@ TEST_CASE("test FastSMC without hashing regression test", "[FastSMC_regression]"
   params.jobs = 25;
   params.useKnownSeed = true;
 
-  assert(params.validateParamsFastSMC());
+  params.validateParamsFastSMC();
 
   ASMC::FastSMC fastSMC(params);
   fastSMC.run();
