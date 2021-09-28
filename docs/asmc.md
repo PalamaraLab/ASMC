@@ -78,31 +78,31 @@ The full set of command line options for `ASMC` is as follows:
 
 ```
 Mandatory:
-  --inFileRoot arg              Prefix of hap|haps|hap.gz|haps.gz and sample|samples file
-  --decodingQuantFile arg       Decoding quantities file
+  --inFileRoot arg                Prefix of hap|haps|hap.gz|haps.gz and sample|samples file
+  --decodingQuantFile arg         Decoding quantities file
 
 Choose one of:
-  --posteriorSums               Output file for sum of posterior distribution
-                                over pairs.
-  --majorMinorPosteriorSums     Output file for sum of posterior distribution 
-                                over pairs, partitioned by major/minor alleles.                                
+  --posteriorSums                 Output file for sum of posterior distribution
+                                  over pairs.
+  --majorMinorPosteriorSums       Output file for sum of posterior distribution 
+                                  over pairs, partitioned by major/minor alleles.                                
 
 Optional:
-  --outFileRoot arg             Output file for sum of posterior distribution
-                                over pairs (default: --hapsFileRoot argument)
-  --jobs int (=0)               Number of jobs being done in parallel
-  --jobInd int (=0)             Job index (1..jobs)
-  --mode string (=array)        Decoding mode. Choose from {sequence, array}.
-  --compress (=false)           Compress emission to binary (no CSFS)
-  --useAncestral (=false)       Assume ancestral alleles are coded as 1 in
-                                input (will assume 1 = minor otherwise)
-  --skipCSFSdistance int (=0)   Genetic distance between two CSFS emissions
+  --outFileRoot arg               Output file for sum of posterior distribution
+                                  over pairs (default: --hapsFileRoot argument)
+  --jobs int (=0)                 Number of jobs being done in parallel
+  --jobInd int (=0)               Job index (1..jobs)
+  --mode string (=array)          Decoding mode. Choose from {sequence, array}.
+  --compress (=false)             Compress emission to binary (no CSFS)
+  --useAncestral (=false)         Assume ancestral alleles are coded as 1 in
+                                  input (will assume 1 = minor otherwise)
+  --skipCSFSdistance float (=0.0) Genetic distance (in cM) between two CSFS emissions
 ```
 
 In addition to the arguments described above, `ASMC` options include:
 - `--compress` is a shorthand for `--skipCSFSdistance Infinity` (see below).
 - `--useAncestral` can be used to specify that a `1` in the data specifies an ancestral allele. This will cause the CSFS to be used without folding. This is mostly not needed.
-- `--skipCSFSdistance int`, which takes an integer argument, specifies the minimum distance for a CSFS emission to be used. The default is `0` (always use CSFS). Setting `--skipCSFSdistance Infinity` (which is the same as `--compress`) leads to never using the CSFS (i.e. the classic PSMC emission if decoding WGS data, or a binary emission which controls for ascertainment if decoding SNP array data).
+- `--skipCSFSdistance float`, which takes a floating point argument, specifies the minimum distance for a CSFS emission to be used. The default is `0.0` (always use CSFS). Setting `--skipCSFSdistance Infinity` (which is the same as `--compress`) leads to never using the CSFS (i.e. the classic PSMC emission if decoding WGS data, or a binary emission which controls for ascertainment if decoding SNP array data).
 
 ## Input/output file formats
 

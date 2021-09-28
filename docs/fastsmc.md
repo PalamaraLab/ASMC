@@ -19,7 +19,8 @@ You can run FastSMC as a C++ compiled executable or using [Python bindings](./fa
 Follow this [quickstart guide](./quickstart_user.md) for information on compiling the FastSMC targets.
 
 ### Detailed command line options
-See the [ASMC documentation](./asmc.md) for parameters related to the validation step. Additional parameters related to the identification step are listed below.
+See the [ASMC documentation](./asmc.md) for parameters related to the validation step.
+Additional parameters related to the identification step are listed below.
 Note: default parameter values are likely to change in future versions.
 
 ```
@@ -31,35 +32,35 @@ Note: default parameter values are likely to change in future versions.
                               	[mandatory]
   --hashing                  	Use of hashing to pre-process IBD segments. If off, no identification step will be performed.
                               	[default 1/on]
-  --min_m arg (=1)		Minimum match length (in cM).
-				[default = 1.0]
-  --time arg (=100)		Time threshold to define IBD in number of generations.
-				[default = 100]
-  --skip arg (=0)		Skip words with (seeds/samples) less than this value
-				[default 0.0]
-  --min_maf arg (=0)		Minimum minor allele frequency
-				[default 0.0]
-  --gap arg (=1)		Allowed gaps
+  --min_m arg (=1)		        Minimum match length (in cM).
+				                [default = 1.0]
+  --time arg (=100)		        Time threshold to define IBD in number of generations.
+				                [default = 100]
+  --skip arg (=0)		        Skip words with (seeds/samples) less than this value
+				                [default 0.0]
+  --min_maf arg (=0)		    Minimum minor allele frequency
+				                [default 0.0]
+  --gap arg (=1)		        Allowed gaps
                                 [default 1]
-  --max_seeds arg (=0)		Dynamic hash seed cutoff
-				[default 0/off]
-  --recall arg (=3)		Recall level from 0 to 3 (higher value means higher recall).
-				[default = 3]
-  --segmentLength		Output length in centimorgans of each IBD segment.
-				[default 1/on]
-  --perPairMAP			Output MAP age estimate for each IBD segment.
-				[default 1/on]
-  --perPairPosteriorMeans	Output posterior mean age estimate for each IBD segment.
-				[default 1/on]
-  --noConditionalAgeEstimates	Do not condition the age estimates on the TMRCA being between present time and t generations ago
-				(where t is the time threshold).
-				[default 0/off]
-  --bin				Binary output
-				[default off]
-  --batchSize			Size of batches to be decoded.
-				[default = 32]
-  --hashingOnly Only perform GERMLINE2 hashing, not ASMC decoding
-  				[default off]
+  --max_seeds arg (=0)		    Dynamic hash seed cutoff
+				                [default 0/off]
+  --recall arg (=3)		        Recall level from 0 to 3 (higher value means higher recall).
+				                [default = 3]
+  --segmentLength		        Output length in centimorgans of each IBD segment.
+				                [default 1/on]
+  --perPairMAP			        Output MAP age estimate for each IBD segment.
+				                [default 1/on]
+  --perPairPosteriorMeans	    Output posterior mean age estimate for each IBD segment.
+				                [default 1/on]
+  --noConditionalAgeEstimates	Do not condition the age estimates on the TMRCA being between present time and t 
+				                generations ago (where t is the time threshold).
+				                [default 0/off]
+  --bin				            Binary output
+				                [default off]
+  --batchSize			        Size of batches to be decoded.
+				                [default = 32]
+  --hashingOnly                 Only perform GERMLINE2 hashing, not ASMC decoding
+  				                [default off]
 ```
 
 > Note: the `hashingOnly` flag has not been extensively tested.
