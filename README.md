@@ -1,10 +1,10 @@
-[![Ubuntu unit tests](https://github.com/PalamaraLab/ASMC/workflows/Ubuntu%20unit/badge.svg)](https://github.com/PalamaraLab/ASMC/actions)
-[![macOS unit tests](https://github.com/PalamaraLab/ASMC/workflows/macOS%20unit/badge.svg)](https://github.com/PalamaraLab/ASMC/actions)
-[![Python tests](https://github.com/PalamaraLab/ASMC/workflows/Python%203.5%203.8/badge.svg)](https://github.com/PalamaraLab/ASMC/actions)
+[![Unit tests: Ubuntu](https://github.com/PalamaraLab/ASMC/actions/workflows/ubuntu-unit.yml/badge.svg)](https://github.com/PalamaraLab/ASMC/actions/workflows/ubuntu-unit.yml)
+[![Unit tests: macOS](https://github.com/PalamaraLab/ASMC/actions/workflows/macos-unit.yml/badge.svg)](https://github.com/PalamaraLab/ASMC/actions/workflows/macos-unit.yml)
+[![Python 3.6 3.9](https://github.com/PalamaraLab/ASMC/actions/workflows/ubuntu-python.yml/badge.svg)](https://github.com/PalamaraLab/ASMC/actions/workflows/ubuntu-python.yml)
 [![Regression test](https://github.com/PalamaraLab/ASMC/workflows/Regression%20test/badge.svg)](https://github.com/PalamaraLab/ASMC/actions)
 [![Ubuntu asan](https://github.com/PalamaraLab/ASMC/workflows/Ubuntu%20asan/badge.svg)](https://github.com/PalamaraLab/ASMC/actions)
 [![Ubuntu no sse/avx](https://github.com/PalamaraLab/ASMC/workflows/Ubuntu%20no%20sse/avx/badge.svg)](https://github.com/PalamaraLab/ASMC/actions)
-[![codecov](https://codecov.io/gh/PalamaraLab/ASMC/branch/master/graph/badge.svg)](https://codecov.io/gh/PalamaraLab/ASMC)
+[![codecov](https://codecov.io/gh/PalamaraLab/ASMC/branch/main/graph/badge.svg)](https://codecov.io/gh/PalamaraLab/ASMC)
 
 # ASMC and FastSMC
 
