@@ -51,6 +51,10 @@ ASMC::ASMC::ASMC(const std::string& inFileRoot, const std::string& decodingQuant
   setStorePerPairPosteriorMean(true);
 }
 
+DecodingParams ASMC::ASMC::getDecodingParams(){
+  return mParams;
+}
+
 DecodingReturnValues ASMC::ASMC::decodeAllInJob()
 {
   std::cout << "Decoding job " << mParams.jobInd << " of " << mParams.jobs << "\n\n";

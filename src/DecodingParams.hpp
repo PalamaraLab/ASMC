@@ -112,7 +112,7 @@ public:
                           bool _doMajorMinorPosteriorSums = false, bool _doPerPairMAP = false);
 
   /**
-   * Minimal constructor that sets defaults for FastSMC. An er will occur if you try to use this constructor for
+   * Minimal constructor that sets defaults for FastSMC. An error will occur if you try to use this constructor for
    * FastSMC == false.
    *
    * @param _inFileRoot the input file root

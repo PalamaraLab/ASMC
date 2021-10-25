@@ -54,6 +54,8 @@ public:
   ASMC(const std::string& inFileRoot, const std::string& decodingQuantFile, const std::string& outFileRoot = "",
        const std::string& decodingMode = "array");
 
+  DecodingParams getDecodingParams();
+
   DecodingReturnValues decodeAllInJob();
 
   void decodePairs(unsigned from = 0u, unsigned to = 0u, float cmBurnIn = 0.5f);
