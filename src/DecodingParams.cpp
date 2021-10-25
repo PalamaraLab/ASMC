@@ -482,6 +482,33 @@ bool DecodingParams::validateParamsFastSMC()
   return true;
 }
 
+
+bool DecodingParams::printDecodingParams()
+{
+  std::cout << "---------------------------" << std::endl;
+  std::cout << "        ASMC OPTIONS       " << std::endl;
+  std::cout << "---------------------------" << std::endl;
+  std::cout << "inFileRoot : " << inFileRoot << std::endl;
+  std::cout << "decodingQuantFile : " << decodingQuantFile << std::endl;
+  std::cout << "outfileRoot : " << outFileRoot << std::endl;
+  std::cout << "jobs : " << jobs << std::endl;
+  std::cout << "jobInd : " << jobInd << std::endl;
+  if (decodingModeOverall == DecodingModeOverall::array){
+    std::cout << "decodingMode : array" << std::endl;
+  }
+  else{
+    std::cout << "decodingMode : sequence" << std::endl;
+  }
+  std::cout << "decodingSequence: " << decodingSequence << std::endl;
+  std::cout << "foldData: " << foldData << std::endl;
+  std::cout << "usingCSFS: " << usingCSFS << std::endl;
+  std::cout << "compress: " << compress << std::endl;
+  std::cout << "useAncestral: " << useAncestral << std::endl;
+  std::cout << "skipCSFSdistance: " << skipCSFSdistance << std::endl;
+  std::cout << "noBatches: " << noBatches << std::endl;
+  return true;
+}
+
 bool DecodingParams::processOptions()
 {
 

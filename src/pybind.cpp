@@ -134,6 +134,7 @@ PYBIND11_MODULE(asmc_python_bindings, m)
       .def(py::init<std::string, std::string, std::string, bool>(), "in_file_root"_a, "dq_file"_a,
            "out_file_root"_a, "FastSMC"_a = true)
       .def("validateParamsFastSMC", &DecodingParams::validateParamsFastSMC)
+      .def("print_decoding_params", &DecodingParams::printDecodingParams)
       .def_readwrite("inFileRoot", &DecodingParams::inFileRoot)
       .def_readwrite("decodingQuantFile", &DecodingParams::decodingQuantFile)
       .def_readwrite("outFileRoot", &DecodingParams::outFileRoot)
@@ -225,6 +226,7 @@ PYBIND11_MODULE(asmc_python_bindings, m)
       .def(py::init<DecodingParams>(), "decodingParams"_a)
       .def(py::init<const std::string&, const std::string&, const std::string&, const std::string&>(), "in_dir"_a,
            "dq_file"_a, "out_dir"_a = "", "decoding_mode"_a = "array")
+      .def("get_decoding_params", &ASMC::ASMC::getDecodingParams)
       .def("decode_all_in_job", &ASMC::ASMC::decodeAllInJob)
       .def("decode_pairs", py::overload_cast<unsigned, unsigned, float>(&ASMC::ASMC::decodePairs), "from"_a = 0, "to"_a = 0, "cm_burn_in"_a = 0.5)
       .def("decode_pairs",
