@@ -15,6 +15,7 @@
 
 #include "HMM.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <exception>
@@ -462,8 +463,9 @@ void HMM::decodeHapPair(const unsigned long i, const unsigned long j)
   }
 }
 
-void HMM::decodeHapPairs(const std::vector<unsigned long>& hapsA, const std::vector<unsigned long>& hapsB)
+void HMM::decodeHapPairs(const std::vector<unsigned long>& hapsA, const std::vector<unsigned long>& hapsB,
 {
+  const unsigned sequenceLength = static_cast<unsigned>(data.sites);
   if (hapsA.size() != hapsB.size()) {
     throw std::runtime_error("vector of A indices must be the same size as vector of B indices");
   }
