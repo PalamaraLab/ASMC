@@ -56,11 +56,13 @@ public:
 
   DecodingReturnValues decodeAllInJob();
 
-  void decodePairs();
+  void decodePairs(unsigned from = 0u, unsigned to = 0u, float cmBurnIn = 0.5f);
 
-  void decodePairs(const std::vector<unsigned long>& hapIndicesA, const std::vector<unsigned long>& hapIndicesB);
+  void decodePairs(const std::vector<unsigned long> &hapIndicesA, const std::vector<unsigned long> &hapIndicesB,
+                   unsigned from = 0u, unsigned to = 0u, float cmBurnIn = 0.5f);
 
-  void decodePairs(const std::vector<std::string>& hapIdsA, const std::vector<std::string>& hapIdsB);
+  void decodePairs(const std::vector<std::string>& hapIdsA, const std::vector<std::string>& hapIdsB,
+                   unsigned from = 0u, unsigned to = 0u, float cmBurnIn = 0.5f);
 
   DecodePairsReturnStruct getCopyOfResults();
 

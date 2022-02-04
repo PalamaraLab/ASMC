@@ -80,7 +80,7 @@ DecodingReturnValues ASMC::ASMC::decodeAllInJob()
   return mHmm.getDecodingReturnValues();
 }
 
-void ASMC::ASMC::decodePairs()
+void ASMC::ASMC::decodePairs(const unsigned from, const unsigned to, const float cmBurnIn)
 {
   const unsigned long numInd = mData.individuals.size();
   const unsigned long numHap = 2ul * numInd;
@@ -101,27 +101,29 @@ void ASMC::ASMC::decodePairs()
 
   assert(numPairs == hapIndicesA.size());
 
-  decodePairs(hapIndicesA, hapIndicesB);
+  decodePairs(hapIndicesA, hapIndicesB, from, to, cmBurnIn);
 }
 
 void ASMC::ASMC::decodePairs(const std::vector<unsigned long>& hapIndicesA,
-                             const std::vector<unsigned long>& hapIndicesB)
+                             const std::vector<unsigned long>& hapIndicesB,
+                             const unsigned from, const unsigned to, const float cmBurnIn)
 {
   if (hapIndicesA.empty() || hapIndicesA.size() != hapIndicesB.size()) {
     throw std::runtime_error(
         fmt::format("Vector of A indices ({}) must be the same size as vector of B indices ({}).\n", hapIndicesA.size(),
                     hapIndicesB.size()));
   }
-
+  const long int seqLen = to > from ? to - from : mData.sites;
   mHmm.getDecodePairsReturnStruct().initialise(
-      hapIndicesA, hapIndicesB, mData.sites, mHmm.getDecodingQuantities().states, mHmm.getStorePerPairPosterior(),
+      hapIndicesA, hapIndicesB, seqLen, mHmm.getDecodingQuantities().states, mHmm.getStorePerPairPosterior(),
       mHmm.getStoreSumOfPosterior(), mHmm.getStorePerPairPosteriorMean(), mHmm.getStorePerPairMap());
-  mHmm.decodeHapPairs(hapIndicesA, hapIndicesB);
+  mHmm.decodeHapPairs(hapIndicesA, hapIndicesB, from, to, cmBurnIn);
   mHmm.finishDecoding();
   mHmm.getDecodePairsReturnStruct().finaliseCalculations();
 }
 
-void ASMC::ASMC::decodePairs(const std::vector<std::string>& hapIdsA, const std::vector<std::string>& hapIdsB)
+void ASMC::ASMC::decodePairs(const std::vector<std::string>& hapIdsA, const std::vector<std::string>& hapIdsB,
+                             const unsigned from, const unsigned to, const float cmBurnIn)
 {
   if (hapIdsA.size() != hapIdsB.size()) {
     throw std::runtime_error(fmt::format("Vector of A IDs ({}) must be the same size as vector of B IDs ({}).\n",
@@ -145,7 +147,7 @@ void ASMC::ASMC::decodePairs(const std::vector<std::string>& hapIdsA, const std:
     hapsIndicesB.at(i) = asmc::dipToHapId(indIdB, hapB);
   }
 
-  decodePairs(hapsIndicesA, hapsIndicesB);
+  decodePairs(hapsIndicesA, hapsIndicesB, from, to, cmBurnIn);
 }
 
 DecodePairsReturnStruct ASMC::ASMC::getCopyOfResults()
