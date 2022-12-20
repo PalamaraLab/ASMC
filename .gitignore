@@ -45,3 +45,4 @@ venv
 .vscode
 .idea
 cmake-build-*
+build
