@@ -49,10 +49,11 @@ Building the optional Python bindings additionally requires:
 
 Decoding quantities files are required in order to run ASMC and FastSMC.
 These can be generated directly from a Python module, and instructions can be found [here](https://github.com/PalamaraLab/PrepareDecoding).
+Input and output file formats for the tool used to create decoding quantities are described [here](https://github.com/PalamaraLab/PrepareDecoding/blob/master/docs/file_formats.md).
 
 Note: the CEU.demo demographic model and the decoding quantities for CEU+UKBB previously provided in [this repository](https://github.com/PalamaraLab/FastSMC) and [this repository](https://github.com/PalamaraLab/ASMC_legacy) were mistakenly encoded as diploid rather than haploid.
 The file [CEU.demo](https://github.com/PalamaraLab/ASMC_data/tree/main/demographies) and CEU+UKBB decoding quantities [here](https://github.com/PalamaraLab/ASMC_data/tree/main/decoding_quantities) have now been fixed.
-They were generated using v2.2.1 of the [PrepareDecoding tool](https://github.com/PalamaraLab/PrepareDecoding/releases/tag/v2.2.1), which also provides a simpler interface for computing decoding quantities as well as support for additional demographic models.
+They were generated using [v2.2.1](https://github.com/PalamaraLab/PrepareDecoding/releases/tag/v2.2.1) of the [PrepareDecoding tool](https://github.com/PalamaraLab/PrepareDecoding), which also provides a simpler interface for computing decoding quantities as well as support for additional demographic models.
 Using these new decoding quantities with v1.2 of ASMC will tend to produce more recent estimates for TMRCAs compared to the decoding quantities distributed with v1.0 and v1.1.
 This should not have a substantial impact on most downstream analyses.
 
