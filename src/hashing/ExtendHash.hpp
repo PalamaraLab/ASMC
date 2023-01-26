@@ -36,12 +36,6 @@ class ExtendHash
   // Empty Match to insert into hash
   Match m;
 
-  // Iterator for testing insertion
-  std::pair<boost::unordered::iterator_detail::iterator<
-                boost::unordered::detail::ptr_node<std::pair<const unsigned long, Match>>>,
-            bool>
-      extend_ret;
-
 public:
   explicit ExtendHash(const unsigned long wordSize, const unsigned long num, const bool PAR_HAPLOID)
       : mWordSize(wordSize), num(num), mParHaploid(PAR_HAPLOID), m(wordSize)
@@ -76,7 +70,7 @@ public:
   {
     m.getModifiableInterval()[0] = GLOBAL_CURRENT_WORD;
     // Find/extend this location in the hash
-    extend_ret = extend_hash.insert(std::pair<unsigned long int, Match>(pairToLocation(i, j), m));
+    auto extend_ret = extend_hash.insert(std::pair<unsigned long int, Match>(pairToLocation(i, j), m));
     (extend_ret.first->second).extend(w);
   }
 
