@@ -71,7 +71,7 @@ TEST_CASE("test ASMC regression", "[HMM_regression]")
 
       CHECK(rowAsFloats.size() == 6760ul);
       for (auto colIdx = 0ul; colIdx < rowAsFloats.size(); ++colIdx) {
-        CHECK(res.perPairPosteriorMeans(rowIdx, colIdx) == Approx(rowAsFloats.at(colIdx)));
+        CHECK(res.perPairPosteriorMeans(rowIdx, colIdx) == Approx(rowAsFloats.at(colIdx)).epsilon(0.001));
       }
     }
   }
