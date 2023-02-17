@@ -33,7 +33,7 @@ jobs:
 
       - name: install dependencies
         run: |
-          brew install libomp llvm
+          brew install libomp llvm pkg-config
 
       - name: make build directory
         run: mkdir -p build_dir
