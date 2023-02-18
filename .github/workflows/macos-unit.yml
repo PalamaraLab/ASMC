@@ -39,7 +39,7 @@ jobs:
         run: mkdir -p build_dir
 
       - name: cmake configure
-        run: cmake .. -DCMAKE_CXX_COMPILER=$(brew --prefix llvm@14)/bin/clang++ -DCMAKE_C_COMPILER=$(brew --prefix llvm@14)/bin/clang
+        run: cmake .. -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_C_COMPILER=clang
         working-directory: build_dir
 
       - name: cmake build
