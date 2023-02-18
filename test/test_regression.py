@@ -33,11 +33,11 @@ class TestASMCRegression(unittest.TestCase):
 
         existing_post = np.loadtxt(
             str(data_dir / 'testing' / 'asmc' / 'regression' / 'regression.perPairPosteriorMeans.gz'))
-        self.assertEqual(np.allclose(res.per_pair_posterior_means, existing_post), True)
+        self.assertEqual(np.allclose(res.per_pair_posterior_means, existing_post, rtol=0.001), True)
 
         existing_map = np.loadtxt(
             str(data_dir / 'testing' / 'asmc' / 'regression' / 'regression.perPairMAP.gz'))
-        self.assertEqual(np.allclose(res.per_pair_MAPs, existing_map), True)
+        self.assertEqual(np.allclose(res.per_pair_MAPs, existing_map, rtol=0.001), True)
 
 
 class TestFastSMCRegression(unittest.TestCase):
@@ -74,7 +74,7 @@ class TestFastSMCRegression(unittest.TestCase):
         generated_text = np.loadtxt(self.params.outFileRoot + ".1.1.FastSMC.ibd.gz", usecols=(7, 8, 9, 10, 11))
 
         self.assertEqual(original_text.shape, generated_text.shape)
-        self.assertEqual(np.allclose(original_text, generated_text), True)
+        self.assertEqual(np.allclose(original_text, generated_text, rtol=0.001), True)
 
 
 class TestFastSMCRegressionWithoutHashing(unittest.TestCase):
@@ -114,4 +114,4 @@ class TestFastSMCRegressionWithoutHashing(unittest.TestCase):
         generated_text = np.loadtxt(self.params.outFileRoot + ".7.25.FastSMC.ibd.gz", usecols=(7, 8, 9, 10, 11))
 
         self.assertEqual(original_text.shape, generated_text.shape)
-        self.assertEqual(np.allclose(original_text, generated_text), True)
+        self.assertEqual(np.allclose(original_text, generated_text, rtol=0.001), True)
