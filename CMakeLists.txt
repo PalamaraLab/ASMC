@@ -191,7 +191,7 @@ if (ASMC_TESTING)
 
     add_executable(ASMC_regression ${ASMC_regression})
     target_include_directories(ASMC_regression PRIVATE ${ASMC_test_dir})
-    target_link_libraries(ASMC_regression PRIVATE ASMC)
+    target_link_libraries(ASMC_regression PRIVATE ASMC ASMC_data_module)
     add_test(regression ASMC_regression)
 endif ()
 
