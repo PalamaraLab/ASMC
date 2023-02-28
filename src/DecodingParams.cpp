@@ -22,6 +22,7 @@
 #include <fmt/core.h>
 #include <fmt/ostream.h>
 
+#include <cmath>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -328,14 +329,14 @@ bool DecodingParams::validateParamsFastSMC()
                 << " ancestral allele information." << std::endl;
       exit(1);
     }
-    if (!isnan(skipCSFSdistance)) {
+    if (!std::isnan(skipCSFSdistance)) {
       std::cerr << del << "compress & " << del << "skipCSFSdistance cannot be used together. " << del << "compress is a"
                 << " shorthand for " << del << "skipCSFSdistance Infinity." << std::endl;
       exit(1);
     }
     skipCSFSdistance = std::numeric_limits<float>::infinity();
   } else {
-    if (isnan(skipCSFSdistance)) {
+    if (std::isnan(skipCSFSdistance)) {
       // default: use CSFS at all sites
       skipCSFSdistance = 0.f;
     }
@@ -492,7 +493,7 @@ bool DecodingParams::processOptions()
           << std::endl;
       exit(1);
     }
-    if (!isnan(skipCSFSdistance)) {
+    if (!std::isnan(skipCSFSdistance)) {
       std::cerr << "--compress & --skipCSFSdistance cannot be used together. --compress is a shorthand for "
                    "--skipCSFSdistance Infinity."
                 << std::endl;
@@ -500,7 +501,7 @@ bool DecodingParams::processOptions()
     }
     skipCSFSdistance = std::numeric_limits<float>::infinity();
   } else {
-    if (isnan(skipCSFSdistance)) {
+    if (std::isnan(skipCSFSdistance)) {
       // default: use CSFS at all sites
       skipCSFSdistance = 0.f;
     }

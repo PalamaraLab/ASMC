@@ -8,7 +8,7 @@
 	- [Example using the compiled FastSMC executable (C++)](#example-using-the-compiled-fastsmc-executable-c)
 - [Relationship to ASMC](#relationship-to-asmc)
 
-The Fast Sequentially Markovian Coalescent (FastSMC) algorithm is an extension to the ASMC algorithm, adding an identification step by hashing (currently using an improved version of the GERMLINE algorithm).
+The FastSMC algorithm is an extension to the ASMC algorithm, adding an identification step by hashing (currently using an improved version of the GERMLINE algorithm).
 FastSMC is an accurate method to detect Identical-By-Descent segments which enables estimating the time to most recent common ancestor for IBD individuals, and provides an estimate of uncertainty for detected IBD regions.
 
 **This document is not intended as an extensive guide, a more detailed user manual is under development, data and annotations from the FastSMC paper can be found [here](https://palamaralab.github.io/software/fastsmc/).**
@@ -86,7 +86,7 @@ See the instructions above to generate decoding quantities files and the [ASMC m
 
 Note: the CEU.demo demographic model and the decoding quantities for CEU+UKBB previously provided in [this repository](https://github.com/PalamaraLab/FastSMC) and [this repository](https://github.com/PalamaraLab/ASMC_legacy) were mistakenly encoded as diploid rather than haploid.
 The file [CEU.demo](https://github.com/PalamaraLab/ASMC_data/tree/main/demographies) and CEU+UKBB decoding quantities [here](https://github.com/PalamaraLab/ASMC_data/tree/main/decoding_quantities) have now been fixed.
-They were generated using v2.2.1 of the [PrepareDecoding tool](https://github.com/PalamaraLab/PrepareDecoding/releases/tag/v2.2.1), which also provides a simpler interface for computing decoding quantities as well as support for additional demographic models.
+They were generated using [v2.2.1](https://github.com/PalamaraLab/PrepareDecoding/releases/tag/v2.2.1) of the [PrepareDecoding tool](https://github.com/PalamaraLab/PrepareDecoding), which also provides a simpler interface for computing decoding quantities as well as support for additional demographic models.
 Using these new decoding quantities with v1.2 of ASMC will tend to produce more recent estimates for TMRCAs compared to the decoding quantities distributed with v1.0 and v1.1.
 This should not have a substantial impact on most downstream analyses.
 

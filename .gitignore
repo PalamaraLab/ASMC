@@ -39,3 +39,10 @@ notebooks/.ipynb_checkpoints/
 
 # Virtual environments
 venv
+
+
+# IDEs
+.vscode
+.idea
+cmake-build-*
+build
