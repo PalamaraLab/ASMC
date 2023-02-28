@@ -18,9 +18,11 @@ jobs:
     if: ${{ github.event_name == 'pull_request' || github.repository == 'PalamaraLab/ASMC' }}
 
     steps:
-      - uses: actions/checkout@v2
+      - name: checkout repo & submodules
+        uses: actions/checkout@v3
         with:
           submodules: true
+          fetch-depth: 0
 
       - name: cache vcpkg installed packages
         uses: actions/cache@v2
