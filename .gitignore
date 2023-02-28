@@ -165,6 +165,7 @@ dmypy.json
 # Custom ASMC-related #
 #######################
 
-#IDEs
 .vscode
-
+.idea
+cmake-build-*
+build

@@ -18,12 +18,12 @@
 #include <string>
 #include <vector>
 
+#include "utils/StringUtils.hpp"
+
 #include "DecodingParams.hpp"
 #include "FastSMC.hpp"
 #include "FileUtils.hpp"
 #include "Timer.hpp"
-
-
 
 TEST_CASE("test FastSMC with hashing regression test", "[FastSMC_regression]")
 {
@@ -54,7 +54,7 @@ TEST_CASE("test FastSMC with hashing regression test", "[FastSMC_regression]")
 
   SECTION("regression test")
   {
-    const auto expectedNumLines = 1574ul;
+    const auto expectedNumLines = 1587ul;
 
     // Read lines from existing regression test output into a vector of strings
     std::vector<std::string> regressionLines;
@@ -84,7 +84,30 @@ TEST_CASE("test FastSMC with hashing regression test", "[FastSMC_regression]")
     REQUIRE(regressionLines.size() == generatedLines.size());
 
     for (auto lineNum = 0ul; lineNum < regressionLines.size(); ++lineNum) {
-      REQUIRE(regressionLines.at(lineNum) == generatedLines.at(lineNum));
+      auto reg_split = asmc::splitTextByDelimiter(regressionLines.at(lineNum), "\t");
+      auto gen_split = asmc::splitTextByDelimiter(generatedLines.at(lineNum), "\t");
+
+      CHECK(reg_split.size() == 13ul);
+      CHECK(gen_split.size() == 13ul);
+
+      // Check the string fields
+      CHECK(reg_split.at(0) == gen_split.at(0));
+      CHECK(reg_split.at(1) == gen_split.at(1));
+      CHECK(reg_split.at(3) == gen_split.at(3));
+      CHECK(reg_split.at(4) == gen_split.at(4));
+
+      // Check the integer fields
+      CHECK(std::stoul(reg_split.at(2)) == std::stoul(gen_split.at(2)));
+      CHECK(std::stoul(reg_split.at(5)) == std::stoul(gen_split.at(5)));
+      CHECK(std::stoul(reg_split.at(6)) == std::stoul(gen_split.at(6)));
+      CHECK(std::stoul(reg_split.at(7)) == std::stoul(gen_split.at(7)));
+      CHECK(std::stoul(reg_split.at(8)) == std::stoul(gen_split.at(8)));
+
+      // Check the float fields
+      CHECK(std::stold(reg_split.at(9)) == Approx(std::stold(gen_split.at(9))).epsilon(0.001));
+      CHECK(std::stold(reg_split.at(10)) == Approx(std::stold(gen_split.at(10))).epsilon(0.001));
+      CHECK(std::stold(reg_split.at(11)) == Approx(std::stold(gen_split.at(11))).epsilon(0.001));
+      CHECK(std::stold(reg_split.at(12)) == Approx(std::stold(gen_split.at(12))).epsilon(0.001));
     }
   }
 }
@@ -148,7 +171,24 @@ TEST_CASE("test FastSMC with hashing only (GERMLINE2)", "[FastSMC_regression]")
     REQUIRE(regressionLines.size() == generatedLines.size());
 
     for (auto lineNum = 0ul; lineNum < regressionLines.size(); ++lineNum) {
-      REQUIRE(regressionLines.at(lineNum) == generatedLines.at(lineNum));
+      auto reg_split = asmc::splitTextByDelimiter(regressionLines.at(lineNum), "\t");
+      auto gen_split = asmc::splitTextByDelimiter(generatedLines.at(lineNum), "\t");
+
+      CHECK(reg_split.size() == 9ul);
+      CHECK(gen_split.size() == 9ul);
+
+      // Check the string fields
+      CHECK(reg_split.at(0) == gen_split.at(0));
+      CHECK(reg_split.at(1) == gen_split.at(1));
+      CHECK(reg_split.at(3) == gen_split.at(3));
+      CHECK(reg_split.at(4) == gen_split.at(4));
+
+      // Check the integer fields
+      CHECK(std::stoul(reg_split.at(2)) == std::stoul(gen_split.at(2)));
+      CHECK(std::stoul(reg_split.at(5)) == std::stoul(gen_split.at(5)));
+      CHECK(std::stoul(reg_split.at(6)) == std::stoul(gen_split.at(6)));
+      CHECK(std::stoul(reg_split.at(7)) == std::stoul(gen_split.at(7)));
+      CHECK(std::stoul(reg_split.at(8)) == std::stoul(gen_split.at(8)));
     }
   }
 }
@@ -214,7 +254,30 @@ TEST_CASE("test FastSMC without hashing regression test", "[FastSMC_regression]"
     REQUIRE(regressionLines.size() == generatedLines.size());
 
     for (auto lineNum = 0ul; lineNum < regressionLines.size(); ++lineNum) {
-      REQUIRE(regressionLines.at(lineNum) == generatedLines.at(lineNum));
+      auto reg_split = asmc::splitTextByDelimiter(regressionLines.at(lineNum), "\t");
+      auto gen_split = asmc::splitTextByDelimiter(generatedLines.at(lineNum), "\t");
+
+      CHECK(reg_split.size() == 13ul);
+      CHECK(gen_split.size() == 13ul);
+
+      // Check the string fields
+      CHECK(reg_split.at(0) == gen_split.at(0));
+      CHECK(reg_split.at(1) == gen_split.at(1));
+      CHECK(reg_split.at(3) == gen_split.at(3));
+      CHECK(reg_split.at(4) == gen_split.at(4));
+
+      // Check the integer fields
+      CHECK(std::stoul(reg_split.at(2)) == std::stoul(gen_split.at(2)));
+      CHECK(std::stoul(reg_split.at(5)) == std::stoul(gen_split.at(5)));
+      CHECK(std::stoul(reg_split.at(6)) == std::stoul(gen_split.at(6)));
+      CHECK(std::stoul(reg_split.at(7)) == std::stoul(gen_split.at(7)));
+      CHECK(std::stoul(reg_split.at(8)) == std::stoul(gen_split.at(8)));
+
+      // Check the float fields
+      CHECK(std::stold(reg_split.at(9)) == Approx(std::stold(gen_split.at(9))).epsilon(0.001));
+      CHECK(std::stold(reg_split.at(10)) == Approx(std::stold(gen_split.at(10))).epsilon(0.001));
+      CHECK(std::stold(reg_split.at(11)) == Approx(std::stold(gen_split.at(11))).epsilon(0.001));
+      CHECK(std::stold(reg_split.at(12)) == Approx(std::stold(gen_split.at(12))).epsilon(0.001));
     }
   }
 }

@@ -4,20 +4,18 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - '**'
 
 jobs:
 
   build-and-test:
     name: Unit tests on macOS
-    runs-on: macos-latest
-    if:  ${{ github.repository == 'PalamaraLab/ASMC' }}
+    runs-on: macos-12
+    if:  ${{ github.event_name == 'pull_request' || github.repository == 'PalamaraLab/ASMC' }}
 
     steps:
-
-      - name: set xcode version
-        uses: maxim-lobanov/setup-xcode@v1
-        with:
-          xcode-version: latest-stable
 
       - name: checkout repo & submodules
         uses: actions/checkout@v2
@@ -35,13 +33,13 @@ jobs:
 
       - name: install dependencies
         run: |
-          brew install libomp
+          brew install libomp llvm pkg-config
 
       - name: make build directory
         run: mkdir -p build_dir
 
       - name: cmake configure
-        run: cmake ..
+        run: cmake .. -DCMAKE_CXX_COMPILER=$(brew --prefix llvm@15)/bin/clang++ -DCMAKE_C_COMPILER=$(brew --prefix llvm@15)/bin/clang
         working-directory: build_dir
 
       - name: cmake build
