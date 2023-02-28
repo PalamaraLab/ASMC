@@ -1082,9 +1082,9 @@ void HMM::augmentSumOverPairs(vector<PairObservations>& obsBatch, int actualBatc
           sum += posterior_pos_state_pair;
         }
         if (decodingParams.doMajorMinorPosteriorSums) {
-          if (obsBatch[v].homMinorBits[pos] == 1)
+          if (obsBatch.at(v).homMinorBits.at(pos) == 1)
             sum11 += posterior_pos_state_pair;
-          else if (obsBatch[v].obsBits[pos] == 0)
+          else if (obsBatch.at(v).homMinorBits.at(pos) == 0)
             sum00 += posterior_pos_state_pair;
           else
             sum01 += posterior_pos_state_pair;

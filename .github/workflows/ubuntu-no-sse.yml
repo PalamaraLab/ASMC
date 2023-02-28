@@ -12,9 +12,7 @@ jobs:
 
   build-and-test:
     name: Unit tests with out sse/avx on Ubuntu
-    runs-on: ubuntu-20.04
-    env:
-      CXX: g++-9
+    runs-on: ubuntu-22.04
     if: ${{ github.event_name == 'pull_request' || github.repository == 'PalamaraLab/ASMC' }}
 
     steps:
