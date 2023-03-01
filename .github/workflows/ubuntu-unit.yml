@@ -12,17 +12,16 @@ jobs:
 
   build-and-test:
     name: Unit tests on Ubuntu
-    runs-on: ubuntu-20.04
-    env:
-      CXX: g++-9
+    runs-on: ubuntu-22.04
     if:  ${{ github.event_name == 'pull_request' || github.repository == 'PalamaraLab/ASMC' }}
 
     steps:
 
       - name: checkout repo & submodules
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           submodules: true
+          fetch-depth: 0
 
       - name: cache vcpkg installed packages
         uses: actions/cache@v2
@@ -37,7 +36,7 @@ jobs:
         run: mkdir -p build_dir
 
       - name: cmake configure
-        run: cmake .. -DCMAKE_TOOLCHAIN_FILE=../vcpkg/scripts/buildsystems/vcpkg.cmake -DCMAKE_BUILD_TYPE=Debug
+        run: cmake ..
         working-directory: build_dir
 
       - name: cmake build

@@ -121,6 +121,7 @@ class HMM
   unsigned int endBatch;
   std::vector<unsigned int> fromBatch;
   std::vector<unsigned int> toBatch;
+  float mCmBurnIn = 0.5f;
   unsigned long int cpt = 0;
   unsigned long int nbSegmentsDetected = 0;
   unsigned long int nbBatch;
@@ -228,8 +229,12 @@ public:
   ///
   /// @param individualsA vector of indices of first hap
   /// @param individualsB vector of indices of second hap
+  /// @param from the start index (defaults to zero)
+  /// @param to the end index (defaults to the sequence length)
+  /// @param cmBurnIn the target distance in centimorgans before `from` and after `to`
   ///
-  void decodeHapPairs(const std::vector<unsigned long>& individualsA, const std::vector<unsigned long>& individualsB);
+  void decodeHapPairs(const std::vector<unsigned long>& individualsA, const std::vector<unsigned long>& individualsB,
+                      unsigned from = 0u, unsigned to = 0u, float cmBurnIn = 0.5f);
 
   /// decode a single pair over a segment of the genome
   ///
@@ -359,7 +364,7 @@ private:
                               const std::vector<float>& emission2minus0AtSite);
 
   // --posteriorSums
-  void augmentSumOverPairs(std::vector<PairObservations>& obsBatch, int actualBatchSize, int paddedBatchSize);
+  void augmentSumOverPairs(std::vector<PairObservations>& obsBatch, int actualBatchSize, int paddedBatchSize, unsigned from, unsigned to);
 
   float getMAP(std::vector<float> posterior);
 

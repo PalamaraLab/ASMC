@@ -9,17 +9,16 @@ jobs:
 
   build-and-test:
     name: Coverage on Ubuntu
-    runs-on: ubuntu-20.04
-    env:
-      CXX: g++-10
+    runs-on: ubuntu-22.04
     if: ${{ github.repository == 'PalamaraLab/ASMC' }}
 
     steps:
 
       - name: checkout repo & submodules
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           submodules: true
+          fetch-depth: 0
 
       - name: cache vcpkg installed packages
         uses: actions/cache@v2
@@ -40,7 +39,7 @@ jobs:
 
       - name: run unit tests with coverage
         run: |
-          cmake .. -DCMAKE_TOOLCHAIN_FILE=../vcpkg/scripts/buildsystems/vcpkg.cmake -DCMAKE_BUILD_TYPE=Debug -DASMC_ENABLE_COVERAGE=ON
+          cmake .. -DCMAKE_BUILD_TYPE=Debug -DASMC_ENABLE_COVERAGE=ON
           cmake --build . --parallel 2 --target ASMC_unit_tests
           ctest -j2 -R Asmc_unit_tests --output-on-failure
         working-directory: build_dir

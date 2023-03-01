@@ -15,6 +15,7 @@
 
 #include "HMM.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <chrono>
 #include <exception>
@@ -257,6 +258,10 @@ void HMM::prepareEmissions()
 
 void HMM::resetDecoding()
 {
+  const long int seqFrom = static_cast<long int>(*std::min_element(fromBatch.begin(), fromBatch.end()));
+  const long int seqTo = static_cast<long int>(*std::max_element(toBatch.begin(), toBatch.end()));
+  const unsigned seqLen = seqTo - seqFrom;
+
   if (m_writePerPairPosteriorMean && !decodingParams.FastSMC) {
     if (foutPosteriorMeanPerPair) {
       foutPosteriorMeanPerPair.close();
@@ -270,12 +275,12 @@ void HMM::resetDecoding()
     foutMAPPerPair.openOrExit(outFileRoot + ".perPairMAP.gz");
   }
 
-  m_decodingReturnValues.sumOverPairs = Eigen::ArrayXXf::Zero(sequenceLength, states);
+  m_decodingReturnValues.sumOverPairs = Eigen::ArrayXXf::Zero(seqLen, states);
 
   if (decodingParams.doMajorMinorPosteriorSums) {
-    m_decodingReturnValues.sumOverPairs00 = Eigen::ArrayXXf::Zero(sequenceLength, states);
-    m_decodingReturnValues.sumOverPairs01 = Eigen::ArrayXXf::Zero(sequenceLength, states);
-    m_decodingReturnValues.sumOverPairs11 = Eigen::ArrayXXf::Zero(sequenceLength, states);
+    m_decodingReturnValues.sumOverPairs00 = Eigen::ArrayXXf::Zero(seqLen, states);
+    m_decodingReturnValues.sumOverPairs01 = Eigen::ArrayXXf::Zero(seqLen, states);
+    m_decodingReturnValues.sumOverPairs11 = Eigen::ArrayXXf::Zero(seqLen, states);
   }
 }
 
@@ -462,8 +467,29 @@ void HMM::decodeHapPair(const unsigned long i, const unsigned long j)
   }
 }
 
-void HMM::decodeHapPairs(const std::vector<unsigned long>& hapsA, const std::vector<unsigned long>& hapsB)
+void HMM::decodeHapPairs(const std::vector<unsigned long>& hapsA, const std::vector<unsigned long>& hapsB,
+                         const unsigned from, unsigned to, const float cmBurnIn)
 {
+  const unsigned sequenceLength = static_cast<unsigned>(data.sites);
+
+  if (to == 0u) {
+    to = sequenceLength;
+  }
+
+  if (from >= to || to > sequenceLength) {
+    throw std::runtime_error(
+      fmt::format("Require 0 <= from < to <= sequenceLength but got 0 <= {} < {} <= {}\n", from, to, sequenceLength)
+    );
+  }
+
+  if (cmBurnIn < 0.f) {
+        throw std::runtime_error(fmt::format("Burn-in dist in cM should be >= 0.0 but got cmBirnIn = {}\n", cmBurnIn));
+  }
+
+  std::fill(fromBatch.begin(), fromBatch.end(), from);
+  std::fill(toBatch.begin(), toBatch.end(), to);
+  mCmBurnIn = cmBurnIn;
+
   if (hapsA.size() != hapsB.size()) {
     throw std::runtime_error("vector of A indices must be the same size as vector of B indices");
   }
@@ -552,10 +578,12 @@ void HMM::addToBatch(vector<PairObservations>& obsBatch, const PairObservations&
     startBatch = *std::min_element(fromBatch.begin(), fromBatch.end());
     endBatch = *std::max_element(toBatch.begin(), toBatch.end());
 
-    unsigned int from = asmc::getFromPosition(data.geneticPositions, startBatch);
-    unsigned int to = asmc::getToPosition(data.geneticPositions, endBatch);
+    unsigned int from = asmc::getFromPosition(data.geneticPositions, startBatch, mCmBurnIn);
+    unsigned int to = asmc::getToPosition(data.geneticPositions, endBatch, mCmBurnIn);
 
-    const bool makeBitsOnlyOnSubsequence = decodingParams.FastSMC && decodingParams.hashing;
+    const bool fastsmcWithHashing = decodingParams.FastSMC && decodingParams.hashing;
+    const bool fromOrTo = from > 0u || to < sequenceLength;
+    const bool makeBitsOnlyOnSubsequence = fastsmcWithHashing || fromOrTo;
     if (makeBitsOnlyOnSubsequence) {
       for (auto& obs : obsBatch) {
         makeBits(obs, from, to);
@@ -565,7 +593,7 @@ void HMM::addToBatch(vector<PairObservations>& obsBatch, const PairObservations&
     // decodeBatch saves posteriors into m_alphaBuffer [sequenceLength x states x m_batchSize]
     decodeBatch(obsBatch, from, to);
 
-    augmentSumOverPairs(obsBatch, m_batchSize, m_batchSize);
+    augmentSumOverPairs(obsBatch, m_batchSize, m_batchSize, from, to);
     if ((m_calculatePerPairMAP || m_calculatePerPairPosteriorMean) && !decodingParams.FastSMC) {
       writePerPairOutput(m_batchSize, m_batchSize, obsBatch);
     }
@@ -594,10 +622,12 @@ void HMM::runLastBatch(vector<PairObservations>& obsBatch)
   startBatch = *std::min_element(fromBatch.begin(), fromBatch.begin() + actualBatchSize);
   endBatch = *std::max_element(toBatch.begin(), toBatch.begin() + actualBatchSize);
 
-  unsigned int from = asmc::getFromPosition(data.geneticPositions, startBatch);
-  unsigned int to = asmc::getToPosition(data.geneticPositions, endBatch);
+  unsigned int from = asmc::getFromPosition(data.geneticPositions, startBatch, mCmBurnIn);
+  unsigned int to = asmc::getToPosition(data.geneticPositions, endBatch, mCmBurnIn);
 
-  const bool makeBitsOnlyOnSubsequence = decodingParams.FastSMC && decodingParams.hashing;
+  const bool fastsmcWithHashing = decodingParams.FastSMC && decodingParams.hashing;
+  const bool fromOrTo = from > 0u || to < sequenceLength;
+  const bool makeBitsOnlyOnSubsequence = fastsmcWithHashing || fromOrTo;
   if (makeBitsOnlyOnSubsequence) {
     for (auto& obs : obsBatch) {
       makeBits(obs, from, to);
@@ -613,7 +643,7 @@ void HMM::runLastBatch(vector<PairObservations>& obsBatch)
 
   // decodeBatch saves posteriors into m_alphaBuffer [sequenceLength x states x paddedBatchSize]
   decodeBatch(obsBatch, from, to);
-  augmentSumOverPairs(obsBatch, actualBatchSize, paddedBatchSize);
+  augmentSumOverPairs(obsBatch, actualBatchSize, paddedBatchSize, from, to);
 
   if ((m_calculatePerPairMAP || m_calculatePerPairPosteriorMean) && !decodingParams.FastSMC) {
     writePerPairOutput(actualBatchSize, paddedBatchSize, obsBatch);
@@ -1032,7 +1062,7 @@ void HMM::getPreviousBetaBatched(float recDistFromPrevious, int curBatchSize, Ei
 }
 
 // --posteriorSums
-void HMM::augmentSumOverPairs(vector<PairObservations>& obsBatch, int actualBatchSize, int paddedBatchSize)
+void HMM::augmentSumOverPairs(vector<PairObservations>& obsBatch, int actualBatchSize, int paddedBatchSize, unsigned from, unsigned to)
 {
 
   auto t0 = std::chrono::high_resolution_clock::now();
@@ -1040,7 +1070,10 @@ void HMM::augmentSumOverPairs(vector<PairObservations>& obsBatch, int actualBatc
   if (!decodingParams.doPosteriorSums && !decodingParams.doMajorMinorPosteriorSums)
     return;
 
-  for (long int pos = 0; pos < sequenceLength; pos++) {
+  for (long int pos = from; pos < to; pos++) {
+
+    long int offset = pos - static_cast<long int>(from);
+
     for (int k = 0; k < states; k++) {
       float sum = 0;
       float sum00 = 0;
@@ -1052,21 +1085,21 @@ void HMM::augmentSumOverPairs(vector<PairObservations>& obsBatch, int actualBatc
           sum += posterior_pos_state_pair;
         }
         if (decodingParams.doMajorMinorPosteriorSums) {
-          if (obsBatch[v].homMinorBits[pos] == 1)
+          if (obsBatch.at(v).homMinorBits.at(offset) == 1)
             sum11 += posterior_pos_state_pair;
-          else if (obsBatch[v].obsBits[pos] == 0)
+          else if (obsBatch.at(v).homMinorBits.at(offset) == 0)
             sum00 += posterior_pos_state_pair;
           else
             sum01 += posterior_pos_state_pair;
         }
       }
       if (decodingParams.doPosteriorSums) {
-        m_decodingReturnValues.sumOverPairs(pos, k) += sum;
+        m_decodingReturnValues.sumOverPairs(offset, k) += sum;
       }
       if (decodingParams.doMajorMinorPosteriorSums) {
-        m_decodingReturnValues.sumOverPairs00(pos, k) += sum00;
-        m_decodingReturnValues.sumOverPairs01(pos, k) += sum01;
-        m_decodingReturnValues.sumOverPairs11(pos, k) += sum11;
+        m_decodingReturnValues.sumOverPairs00(offset, k) += sum00;
+        m_decodingReturnValues.sumOverPairs01(offset, k) += sum01;
+        m_decodingReturnValues.sumOverPairs11(offset, k) += sum11;
       }
     }
   }
@@ -1347,6 +1380,11 @@ void HMM::writePerPairOutput(int actualBatchSize, int paddedBatchSize, const vec
 {
   auto t0 = std::chrono::high_resolution_clock::now();
 
+  const long int seqFrom = static_cast<long int>(*std::min_element(fromBatch.begin(), fromBatch.end()));
+  const long int seqTo = static_cast<long int>(*std::max_element(toBatch.begin(), toBatch.end()));
+  assert(seqTo > seqFrom);
+  const unsigned seqLen = seqTo - seqFrom;
+
   Eigen::Array<Eigen::Array<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor>, Eigen::Dynamic, 1> posteriors;
 
   // Calculate per pair posterior mean
@@ -1357,21 +1395,22 @@ void HMM::writePerPairOutput(int actualBatchSize, int paddedBatchSize, const vec
     if (m_storePerPairPosterior) {
       posteriors.resize(actualBatchSize);
       for (Eigen::Index batchIdx = 0ll; batchIdx < actualBatchSize; ++batchIdx) {
-        posteriors(batchIdx).resize(states, sequenceLength);
+        posteriors(batchIdx).resize(states, seqLen);
       }
     }
 
-    for (long int pos = 0; pos < sequenceLength; pos++) {
+    for (long int pos = seqFrom; pos < seqTo; pos++) {
+      const long int offset = pos - seqFrom;
       for (int k = 0; k < states; k++) {
         for (int batchIdx = 0; batchIdx < actualBatchSize; batchIdx++) {
           float posterior_pos_state_pair = m_alphaBuffer[(pos * states + k) * paddedBatchSize + batchIdx];
           float postValue = posterior_pos_state_pair;
-          meanPost(batchIdx, pos) += postValue * expectedCoalTimes[k];
+          meanPost(batchIdx, offset) += postValue * expectedCoalTimes[k];
           if (m_storePerPairPosterior) {
-            posteriors(batchIdx)(k, pos) = postValue;
+            posteriors(batchIdx)(k, offset) = postValue;
           }
           if (m_storeSumOfPosterior) {
-            m_decodePairsReturnStruct.sumOfPosteriors(k, pos) += postValue;
+            m_decodePairsReturnStruct.sumOfPosteriors(k, offset) += postValue;
           }
         }
       }
@@ -1381,13 +1420,14 @@ void HMM::writePerPairOutput(int actualBatchSize, int paddedBatchSize, const vec
   // Calculate per pair MAP
   if (m_calculatePerPairMAP) {
     MAP.setZero();
-    for (long int pos = 0; pos < sequenceLength; pos++) {
+    for (long int pos = seqFrom; pos < seqTo; pos++) {
+      const long int offset = pos - seqFrom;
       currentMAPValue.setZero();
       for (int k = 0; k < states; k++) {
         for (int batchIdx = 0; batchIdx < actualBatchSize; batchIdx++) {
           float posterior_pos_state_pair = m_alphaBuffer[(pos * states + k) * paddedBatchSize + batchIdx];
           if (currentMAPValue[batchIdx] < posterior_pos_state_pair) {
-            MAP(batchIdx, pos) = k;
+            MAP(batchIdx, offset) = k;
             currentMAPValue[batchIdx] = posterior_pos_state_pair;
           }
         }
@@ -1721,8 +1761,12 @@ void HMM::updateOutputStructures() {
       m_storePerPairPosteriorMean || m_writePerPairPosteriorMean || m_storePerPairPosterior;
   m_calculatePerPairMAP = m_storePerPairMAP || m_writePerPairMAP;
 
+  const long int seqFrom = static_cast<long int>(*std::min_element(fromBatch.begin(), fromBatch.end()));
+  const long int seqTo = static_cast<long int>(*std::max_element(toBatch.begin(), toBatch.end()));
+  const unsigned seqLen = seqTo - seqFrom;
+
   if (m_calculatePerPairPosteriorMean) {
-    meanPost.resize(m_batchSize, sequenceLength);
+    meanPost.resize(m_batchSize, seqLen);
 
     if (expectedCoalTimes.empty() && !decodingParams.FastSMC) {
       if (!expectedCoalTimesFile.empty() && std::filesystem::is_regular_file(expectedCoalTimesFile)) {
@@ -1736,7 +1780,7 @@ void HMM::updateOutputStructures() {
   }
 
   if (m_calculatePerPairMAP) {
-    MAP.resize(m_batchSize, sequenceLength);
+    MAP.resize(m_batchSize, seqLen);
     currentMAPValue.resize(m_batchSize);
   }
 

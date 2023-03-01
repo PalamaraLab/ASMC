@@ -101,3 +101,66 @@ TEST_CASE("test other get methods", "[ASMC]")
   CHECK(expectedTimes.at(0) == Approx(14.999777896567f).margin(1e-5));
   CHECK(expectedTimes.at(4) == Approx(135.698150766900f).margin(1e-5));
 }
+
+TEST_CASE("test from and to", "[ASMC]")
+{
+  ASMC::ASMC asmc_full(ASMC_DATA_DIR "/examples/asmc/exampleFile.n300.array",
+                       ASMC_DATA_DIR "/decoding_quantities/30-100-2000_CEU.decodingQuantities.gz");
+
+  ASMC::ASMC asmc_part(ASMC_DATA_DIR "/examples/asmc/exampleFile.n300.array",
+                       ASMC_DATA_DIR "/decoding_quantities/30-100-2000_CEU.decodingQuantities.gz");
+
+  std::vector<unsigned long> indA = {1, 2, 3, 4, 5};
+  std::vector<unsigned long> indB = {6, 7, 8, 9, 10};
+
+  asmc_full.setStorePerPairMap();
+  asmc_full.setStorePerPairPosterior();
+  asmc_full.setStorePerPairPosteriorMean();
+  asmc_full.setStoreSumOfPosterior();
+
+  asmc_part.setStorePerPairMap();
+  asmc_part.setStorePerPairPosterior();
+  asmc_part.setStorePerPairPosteriorMean();
+  asmc_part.setStoreSumOfPosterior();
+
+  asmc_full.decodePairs(indA, indB);
+  auto result_full = asmc_full.getRefOfResults();
+  asmc_part.setStorePerPairMap();
+
+  const unsigned lo = 1000;
+  const unsigned hi = 1100;
+  const unsigned long windowSize = static_cast<unsigned long>(hi - lo);
+  asmc_part.decodePairs(indA, indB, lo, hi, 0.5f);
+  auto result_part = asmc_part.getRefOfResults();
+
+  SECTION("test part sizes are correct")
+  {
+    REQUIRE(result_part.perPairPosteriors.front().rows() == result_full.perPairPosteriors.front().rows());
+    REQUIRE(result_part.perPairPosteriors.front().cols() == windowSize);
+
+    REQUIRE(result_part.sumOfPosteriors.rows() == result_full.sumOfPosteriors.rows());
+    REQUIRE(result_part.sumOfPosteriors.cols() == windowSize);
+
+    REQUIRE(result_part.perPairPosteriorMeans.rows() == result_full.perPairPosteriorMeans.rows());
+    REQUIRE(result_part.perPairPosteriorMeans.cols() == windowSize);
+
+    REQUIRE(result_part.minPosteriorMeans.cols() == windowSize);
+    REQUIRE(result_part.argminPosteriorMeans.cols() == windowSize);
+
+    REQUIRE(result_part.perPairMAPs.rows() == result_full.perPairMAPs.rows());
+    REQUIRE(result_part.perPairMAPs.cols() == windowSize);
+
+    REQUIRE(result_part.minMAPs.cols() == windowSize);
+    REQUIRE(result_part.argminMAPs.cols() == windowSize);
+  }
+
+  SECTION("test parts match full analysis")
+  {
+    for(auto i = 0ul; i < indA.size(); ++i) {
+        REQUIRE(
+          (result_full.perPairPosteriors.at(i).middleCols(static_cast<unsigned long>(lo), windowSize)
+            - result_part.perPairPosteriors.at(i)).abs().maxCoeff() < 1e-6
+        );
+    }
+  }
+}

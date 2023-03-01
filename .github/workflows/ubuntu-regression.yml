@@ -11,16 +11,18 @@ on:
 jobs:
 
   build-and-test:
-    name: Regression test on Ubuntu latest
-    runs-on: ubuntu-20.04
+    name: Regression test on Ubuntu
+    runs-on: ubuntu-22.04
     env:
       CXX: g++-10
     if: ${{ github.event_name == 'pull_request' || github.repository == 'PalamaraLab/ASMC' }}
 
     steps:
-      - uses: actions/checkout@v2
+      - name: checkout repo & submodules
+        uses: actions/checkout@v3
         with:
           submodules: true
+          fetch-depth: 0
 
       - name: cache vcpkg installed packages
         uses: actions/cache@v2

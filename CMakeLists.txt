@@ -32,12 +32,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 #export compiler flags for code completion engines
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 
-# Set global compiler warnings
-if (MSVC)
-    add_compile_options(/W3 /WX)
-else ()
-    add_compile_options(-Wall -pedantic -fPIC)
-endif ()
+# Set global compiler warnings for debug builds
+if(CMAKE_BUILD_TYPE MATCHES "Deb")
+    if (MSVC)
+        add_compile_options(/W3 /WX)
+    else ()
+        add_compile_options(-Wall -pedantic -fPIC)
+    endif ()
+endif()
 
 # Set SIMD compiler options
 include(cmake/SIMD.cmake)
@@ -196,18 +198,16 @@ if (ASMC_TESTING)
 endif ()
 
 # boost as a required dependency for ASMC
-find_package(Boost REQUIRED COMPONENTS program_options iostreams)
-target_link_libraries(ASMC PRIVATE ${Boost_LIBRARIES})
-target_include_directories(ASMC PUBLIC ${Boost_INCLUDE_DIR})
+find_package(Boost REQUIRED COMPONENTS iostreams program_options)
+target_link_libraries(ASMC PRIVATE Boost::boost Boost::iostreams Boost::program_options)
 
 # Eigen is required
 find_package(Eigen3 CONFIG REQUIRED)
-target_include_directories(ASMC PUBLIC ${EIGEN3_INCLUDE_DIRS})
+target_link_libraries(ASMC PUBLIC Eigen3::Eigen)
 
 # zlib is required (at least on Linux) for boost iostreams
 find_package(ZLIB REQUIRED)
 target_link_libraries(ASMC PRIVATE ZLIB::ZLIB)
-target_include_directories(ASMC PUBLIC ${ZLIB_INCLUDE_DIRS})
 
 # openmp is a required dependency
 find_package(OpenMP REQUIRED)
@@ -216,7 +216,7 @@ target_link_libraries(ASMC PRIVATE OpenMP::OpenMP_CXX)
 
 # fmt is required for efficient string formatting
 find_package(fmt CONFIG REQUIRED)
-target_link_libraries(ASMC PRIVATE fmt::fmt)
+target_link_libraries(ASMC PUBLIC fmt::fmt)
 
 find_package(range-v3 CONFIG REQUIRED)
 message(STATUS "Found range-v3 ${range-v3_VERSION}")
@@ -240,6 +240,12 @@ if (NOT ASMC_NO_PYTHON)
         )
 
     endif ()
+endif ()
+
+# Need position independent code for Python bindings
+if (ASMC_PYTHON_BINDINGS)
+    set_target_properties(ASMC PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+    set_target_properties(ASMC_data_module PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 endif ()
 
 # Clang tidy as optional static analyzer
