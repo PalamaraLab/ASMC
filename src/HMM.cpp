@@ -593,7 +593,7 @@ void HMM::addToBatch(vector<PairObservations>& obsBatch, const PairObservations&
     // decodeBatch saves posteriors into m_alphaBuffer [sequenceLength x states x m_batchSize]
     decodeBatch(obsBatch, from, to);
 
-    augmentSumOverPairs(obsBatch, m_batchSize, m_batchSize);
+    augmentSumOverPairs(obsBatch, m_batchSize, m_batchSize, from, to);
     if ((m_calculatePerPairMAP || m_calculatePerPairPosteriorMean) && !decodingParams.FastSMC) {
       writePerPairOutput(m_batchSize, m_batchSize, obsBatch);
     }
@@ -643,7 +643,7 @@ void HMM::runLastBatch(vector<PairObservations>& obsBatch)
 
   // decodeBatch saves posteriors into m_alphaBuffer [sequenceLength x states x paddedBatchSize]
   decodeBatch(obsBatch, from, to);
-  augmentSumOverPairs(obsBatch, actualBatchSize, paddedBatchSize);
+  augmentSumOverPairs(obsBatch, actualBatchSize, paddedBatchSize, from, to);
 
   if ((m_calculatePerPairMAP || m_calculatePerPairPosteriorMean) && !decodingParams.FastSMC) {
     writePerPairOutput(actualBatchSize, paddedBatchSize, obsBatch);
@@ -1062,7 +1062,7 @@ void HMM::getPreviousBetaBatched(float recDistFromPrevious, int curBatchSize, Ei
 }
 
 // --posteriorSums
-void HMM::augmentSumOverPairs(vector<PairObservations>& obsBatch, int actualBatchSize, int paddedBatchSize)
+void HMM::augmentSumOverPairs(vector<PairObservations>& obsBatch, int actualBatchSize, int paddedBatchSize, unsigned from, unsigned to)
 {
 
   auto t0 = std::chrono::high_resolution_clock::now();
@@ -1070,7 +1070,10 @@ void HMM::augmentSumOverPairs(vector<PairObservations>& obsBatch, int actualBatc
   if (!decodingParams.doPosteriorSums && !decodingParams.doMajorMinorPosteriorSums)
     return;
 
-  for (long int pos = 0; pos < sequenceLength; pos++) {
+  for (long int pos = from; pos < to; pos++) {
+
+    long int offset = pos - static_cast<long int>(from);
+
     for (int k = 0; k < states; k++) {
       float sum = 0;
       float sum00 = 0;
@@ -1082,21 +1085,21 @@ void HMM::augmentSumOverPairs(vector<PairObservations>& obsBatch, int actualBatc
           sum += posterior_pos_state_pair;
         }
         if (decodingParams.doMajorMinorPosteriorSums) {
-          if (obsBatch.at(v).homMinorBits.at(pos) == 1)
+          if (obsBatch.at(v).homMinorBits.at(offset) == 1)
             sum11 += posterior_pos_state_pair;
-          else if (obsBatch.at(v).homMinorBits.at(pos) == 0)
+          else if (obsBatch.at(v).homMinorBits.at(offset) == 0)
             sum00 += posterior_pos_state_pair;
           else
             sum01 += posterior_pos_state_pair;
         }
       }
       if (decodingParams.doPosteriorSums) {
-        m_decodingReturnValues.sumOverPairs(pos, k) += sum;
+        m_decodingReturnValues.sumOverPairs(offset, k) += sum;
       }
       if (decodingParams.doMajorMinorPosteriorSums) {
-        m_decodingReturnValues.sumOverPairs00(pos, k) += sum00;
-        m_decodingReturnValues.sumOverPairs01(pos, k) += sum01;
-        m_decodingReturnValues.sumOverPairs11(pos, k) += sum11;
+        m_decodingReturnValues.sumOverPairs00(offset, k) += sum00;
+        m_decodingReturnValues.sumOverPairs01(offset, k) += sum01;
+        m_decodingReturnValues.sumOverPairs11(offset, k) += sum11;
       }
     }
   }

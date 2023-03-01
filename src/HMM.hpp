@@ -364,7 +364,7 @@ private:
                               const std::vector<float>& emission2minus0AtSite);
 
   // --posteriorSums
-  void augmentSumOverPairs(std::vector<PairObservations>& obsBatch, int actualBatchSize, int paddedBatchSize);
+  void augmentSumOverPairs(std::vector<PairObservations>& obsBatch, int actualBatchSize, int paddedBatchSize, unsigned from, unsigned to);
 
   float getMAP(std::vector<float> posterior);
 
