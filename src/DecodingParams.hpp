@@ -99,6 +99,13 @@ public:
   bool validateParamsFastSMC();
 
   /**
+   * Print decoding properties that are currently active.
+   * 
+   * @return true; 
+   */ 
+  bool printDecodingParams();
+
+  /**
    * Constructor requiring only an input file root with all other parameters set to sensible defaults.
    * Decoding quantities will be generated if they are not specified and do not exist in the input file directory.
    */
@@ -112,7 +119,7 @@ public:
                           bool _doMajorMinorPosteriorSums = false, bool _doPerPairMAP = false);
 
   /**
-   * Minimal constructor that sets defaults for FastSMC. An er will occur if you try to use this constructor for
+   * Minimal constructor that sets defaults for FastSMC. An error will occur if you try to use this constructor for
    * FastSMC == false.
    *
    * @param _inFileRoot the input file root
@@ -121,6 +128,8 @@ public:
    * @param _fastSMC whether to run in FastSMC: if this is set to false an error will occur
    */
   DecodingParams(std::string _inFileRoot, std::string _decodingQuantFile, std::string _outFileRoot, bool _fastSMC = true);
+
+
 };
 
 #endif
