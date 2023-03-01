@@ -1,5 +1,19 @@
 # ASMC Release Notes
 
+## v1.3 (2023-03-03)
+
+### Breaking changes
+
+None
+
+### Other changes
+
+- Decoding a batch can now be done in a selected subregion with from / to indices.
+  A `cm_burn_in` parameter takes into account additional variants on either side of the subregion for HMM burn-in.
+- Allow the user to access selected attributes of the DecodingParams and Data from the ASMC object.
+- Python continuous integration now uses Python 3.7 and 3.11 (previously 3.6 and 3.9)
+- Update Catch to v2.13.
+
 
 ## v1.2 (2021-09-28)
 
