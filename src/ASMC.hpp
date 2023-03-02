@@ -56,6 +56,16 @@ public:
 
   DecodingParams getDecodingParams();
 
+  unsigned long getDiploidSampleSize();
+
+  unsigned long getHaploidSampleSize();
+
+  int getNumSites();
+
+  std::vector<int> getPhysicalPositions();
+
+  std::vector<float> getGeneticPositions();
+
   DecodingReturnValues decodeAllInJob();
 
   void decodePairs(unsigned from = 0u, unsigned to = 0u, float cmBurnIn = 0.5f);

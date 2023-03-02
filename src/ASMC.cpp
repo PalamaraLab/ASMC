@@ -51,8 +51,34 @@ ASMC::ASMC::ASMC(const std::string& inFileRoot, const std::string& decodingQuant
   setStorePerPairPosteriorMean(true);
 }
 
-DecodingParams ASMC::ASMC::getDecodingParams(){
+DecodingParams ASMC::ASMC::getDecodingParams()
+{
   return mParams;
+}
+
+unsigned long ASMC::ASMC::getDiploidSampleSize()
+{
+  return mData.sampleSize;
+}
+
+unsigned long ASMC::ASMC::getHaploidSampleSize()
+{
+  return mData.haploidSampleSize;
+}
+
+int ASMC::ASMC::getNumSites()
+{
+  return mData.sites;
+}
+
+std::vector<int> ASMC::ASMC::getPhysicalPositions()
+{
+  return mData.physicalPositions;
+}
+
+std::vector<float> ASMC::ASMC::getGeneticPositions()
+{
+  return mData.geneticPositions;
 }
 
 DecodingReturnValues ASMC::ASMC::decodeAllInJob()

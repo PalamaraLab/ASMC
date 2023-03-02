@@ -227,6 +227,11 @@ PYBIND11_MODULE(asmc_python_bindings, m)
       .def(py::init<const std::string&, const std::string&, const std::string&, const std::string&>(), "in_dir"_a,
            "dq_file"_a, "out_dir"_a = "", "decoding_mode"_a = "array")
       .def("get_decoding_params", &ASMC::ASMC::getDecodingParams)
+      .def("get_diploid_sample_size", &ASMC::ASMC::getDiploidSampleSize)
+      .def("get_haploid_sample_size", &ASMC::ASMC::getHaploidSampleSize)
+      .def("get_num_sites", &ASMC::ASMC::getNumSites)
+      .def("get_physical_positions", &ASMC::ASMC::getPhysicalPositions)
+      .def("get_genetic_positions", &ASMC::ASMC::getGeneticPositions)
       .def("decode_all_in_job", &ASMC::ASMC::decodeAllInJob)
       .def("decode_pairs", py::overload_cast<unsigned, unsigned, float>(&ASMC::ASMC::decodePairs), "from"_a = 0, "to"_a = 0, "cm_burn_in"_a = 0.5)
       .def("decode_pairs",
