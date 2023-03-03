@@ -32,24 +32,36 @@ jobs:
       - name: install tools
         run: |
           sudo apt -y update
-          sudo apt -y install g++-10 lcov libcurl4-openssl-dev
+          sudo apt -y install lcov libcurl4-openssl-dev
 
       - name: make build directory
         run: mkdir -p build_dir
 
-      - name: run unit tests with coverage
+      - name: configure
         run: |
           cmake .. -DCMAKE_BUILD_TYPE=Debug -DASMC_ENABLE_COVERAGE=ON
+        working-directory: build_dir
+
+      - name: build
+        run: |
           cmake --build . --parallel 2 --target ASMC_unit_tests
+        working-directory: build_dir
+
+      - name: test
+        run: |
           ctest -j2 -R Asmc_unit_tests --output-on-failure
         working-directory: build_dir
 
-      - name: upload coverage results
+      - name: process coverage
         run: |
           lcov --directory . --capture --output-file coverage.info
           lcov --remove coverage.info '/usr/*' '*/test/*' '*/vcpkg_installed/*' --output-file coverage.info
           lcov --list coverage.info
-          bash <(curl https://codecov.io/bash) -f coverage.info
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        working-directory: build_dir
+
+      - name: upload coverage to codecov
+        run: |
+          curl -Os https://uploader.codecov.io/latest/linux/codecov
+          chmod +x codecov
+          ./codecov
         working-directory: build_dir
