@@ -258,9 +258,13 @@ void HMM::prepareEmissions()
 
 void HMM::resetDecoding()
 {
-  const long int seqFrom = static_cast<long int>(*std::min_element(fromBatch.begin(), fromBatch.end()));
-  const long int seqTo = static_cast<long int>(*std::max_element(toBatch.begin(), toBatch.end()));
-  const unsigned seqLen = seqTo - seqFrom;
+  const unsigned seqFrom = *std::min_element(fromBatch.begin(), fromBatch.end());
+  const unsigned seqTo = *std::max_element(toBatch.begin(), toBatch.end());
+
+  const unsigned from = asmc::getFromPosition(data.geneticPositions, seqFrom, mCmBurnIn);
+  const unsigned to = asmc::getToPosition(data.geneticPositions, seqTo, mCmBurnIn);
+
+  const unsigned seqLen = to - from;
 
   if (m_writePerPairPosteriorMean && !decodingParams.FastSMC) {
     if (foutPosteriorMeanPerPair) {
@@ -489,6 +493,8 @@ void HMM::decodeHapPairs(const std::vector<unsigned long>& hapsA, const std::vec
   std::fill(fromBatch.begin(), fromBatch.end(), from);
   std::fill(toBatch.begin(), toBatch.end(), to);
   mCmBurnIn = cmBurnIn;
+
+  updateOutputStructures();
 
   if (hapsA.size() != hapsB.size()) {
     throw std::runtime_error("vector of A indices must be the same size as vector of B indices");
