@@ -7,6 +7,8 @@ on:
   release:
     types:
       - published
+  schedule:
+    - cron: '42 6 * * 0'
 
 env:
   CIBW_BUILD: cp38-* cp39-* cp310-* cp311-*
