@@ -53,6 +53,7 @@ jobs:
         with:
           name: wheels
           path: ./wheelhouse/*.whl
+          retention-days: 1
 
   upload_all:
     name: Upload to PyPI
