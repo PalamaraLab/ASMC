@@ -88,7 +88,7 @@ bool DecodingParams::processCommandLineArgs(int argc, char* argv[])
   ("decodingQuantFile", po::value<std::string>(&decodingQuantFile),
    "Decoding quantities file")
   ("mapFile", po::value<std::string>(&mapFile),
-"Map file: optional, if not in inFileRoot")
+   "Map file: optional, if not in inFileRoot")
   ("jobs", po::value<int>(&jobs)->default_value(0),
    "Number of jobs being done in parallel")
   ("jobInd", po::value<int>(&jobInd)->default_value(0),
