@@ -10,7 +10,7 @@ Quickstart guide for developers
 Linux
 -----
 
-This guide assumes you have a C++17 compatible compiler (e.g. gcc >= 8.3
+This guide assumes you have a C++17 compatible compiler (e.g. gcc >= 8.3
 or clang >= 7) and `CMake >= 3.15 <https://cmake.org/install/>`__.
 Additionally, to compile the Python bindings you need Python with
 development files:

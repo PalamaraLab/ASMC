@@ -72,6 +72,7 @@ parameters you can instead create the ASMC object with an instance of
    params = DecodingParams(
        in_file_root=input_files_root,
        dq_file=dq_file,
+       map_file="",                          # Optional override for map|map.gz file, if not in in_file_root
        out_file_root="",
        jobs=1,                               # Number of jobs being done in total
        job_ind=1,                            # Job index (0, ..., jobs)
