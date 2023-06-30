@@ -10,7 +10,7 @@ if(NOT ASMC_AVOID_VCPKG)
     include(cmake/AutodetectVcpkgToolchainFile.cmake)
 endif()
 
-project(asmc LANGUAGES CXX VERSION 1.3)
+project(asmc LANGUAGES CXX VERSION 1.3.1)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 

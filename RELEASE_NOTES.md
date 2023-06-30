@@ -1,5 +1,16 @@
 # ASMC Release Notes
 
+## v1.3.1 (2023-06-30)
+
+### Breaking changes
+
+None
+
+### Other changes
+
+- The location of a `.map` or `.map.gz` file can now be optionally specified explicitly: previously it was assumed to be at the `inFileRoot`.
+
+
 ## v1.3 (2023-03-03)
 
 ### Breaking changes
