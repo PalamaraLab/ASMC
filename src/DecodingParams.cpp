@@ -42,13 +42,14 @@ DecodingParams::DecodingParams(std::string _inFileRoot, std::string _decodingQua
                                int _jobs, int _jobInd, std::string _decodingModeString, bool _decodingSequence,
                                bool _usingCSFS, bool _compress, bool _useAncestral, float _skipCSFSdistance,
                                bool _noBatches, bool _doPosteriorSums, bool _doPerPairPosteriorMean,
-                               std::string _expectedCoalTimesFile, bool _withinOnly, bool _doMajorMinorPosteriorSums, bool _doPerPairMAP)
-    : inFileRoot(_inFileRoot), decodingQuantFile(_decodingQuantFile), outFileRoot(_outFileRoot), jobs(_jobs),
-      jobInd(_jobInd), decodingModeString(_decodingModeString), decodingSequence(_decodingSequence),
-      usingCSFS(_usingCSFS), compress(_compress), useAncestral(_useAncestral), skipCSFSdistance(_skipCSFSdistance),
-      noBatches(_noBatches), doPosteriorSums(_doPosteriorSums), doPerPairPosteriorMean(_doPerPairPosteriorMean),
-      expectedCoalTimesFile(_expectedCoalTimesFile), withinOnly(_withinOnly),
-      doMajorMinorPosteriorSums(_doMajorMinorPosteriorSums), doPerPairMAP(_doPerPairMAP)
+                               std::string _expectedCoalTimesFile, bool _withinOnly, bool _doMajorMinorPosteriorSums,
+                               bool _doPerPairMAP, std::string _mapFile)
+    : inFileRoot(_inFileRoot), decodingQuantFile(_decodingQuantFile), mapFile(std::move(_mapFile)),
+      outFileRoot(_outFileRoot), jobs(_jobs), jobInd(_jobInd), decodingModeString(_decodingModeString),
+      decodingSequence(_decodingSequence), usingCSFS(_usingCSFS), compress(_compress), useAncestral(_useAncestral),
+      skipCSFSdistance(_skipCSFSdistance), noBatches(_noBatches), doPosteriorSums(_doPosteriorSums),
+      doPerPairPosteriorMean(_doPerPairPosteriorMean), expectedCoalTimesFile(_expectedCoalTimesFile),
+      withinOnly(_withinOnly), doMajorMinorPosteriorSums(_doMajorMinorPosteriorSums), doPerPairMAP(_doPerPairMAP)
 {
   if (!processOptions()) {
     throw std::exception();
@@ -86,6 +87,8 @@ bool DecodingParams::processCommandLineArgs(int argc, char* argv[])
    "Prefix of hap|haps|hap.gz|haps.gz and sample|samples file")
   ("decodingQuantFile", po::value<std::string>(&decodingQuantFile),
    "Decoding quantities file")
+  ("mapFile", po::value<std::string>(&mapFile),
+"Map file: optional, if not in inFileRoot")
   ("jobs", po::value<int>(&jobs)->default_value(0),
    "Number of jobs being done in parallel")
   ("jobInd", po::value<int>(&jobInd)->default_value(0),
@@ -183,6 +186,8 @@ bool DecodingParams::processCommandLineArgsFastSMC(int argc, char* argv[])
        "Output file for sum of posterior distribution over pairs.")
       ("decodingQuantFile", po::value<std::string>(&decodingQuantFile),
        "Decoding quantities file")
+      ("mapFile", po::value<std::string>(&mapFile),
+       "Map file: optional, if not in inFileRoot")
       ("mode", po::value<std::string>(&decodingModeString)->default_value("array"),
        "Decoding mode. Choose from {sequence, array}. [default = array]")
       ("time", po::value<int>(&time)->default_value(100),
