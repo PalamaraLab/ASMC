@@ -2,6 +2,8 @@ import numpy as np
 
 import pathlib
 import sys
+import shutil
+import tempfile
 import unittest
 
 from asmc.asmc import *
@@ -90,11 +92,16 @@ class TestASMCDecodingParams(unittest.TestCase):
             self.assertEqual(len(d[i]), data.sites)
 
     def test_with_explicit_map_file(self):
-        inFileRoot = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300.array')
+
+        # Copy the map file to a temporary directory
+        temp_dir = pathlib.Path(tempfile.mkdtemp())
         mapFile = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300.map.gz')
+        shutil.copy(mapFile, temp_dir / 'exampleFile.n300.map.gz')
+
+        inFileRoot = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300.array')
         decodingQuantFile = str(data_dir / 'decoding_quantities' / '30-100-2000_CEU.decodingQuantities.gz')
         params = DecodingParams(inFileRoot, decodingQuantFile, compress=True,
-                                skip_CSFS_distance=float('nan'), map_file=mapFile)
+                                skip_CSFS_distance=float('nan'), map_file=str(temp_dir / 'exampleFile.n300.map.gz'))
 
         self.assertEqual(params.compress, True)
         self.assertEqual(params.skipCSFSdistance, float('inf'))
