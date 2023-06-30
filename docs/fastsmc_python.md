@@ -62,6 +62,7 @@ The following parameters can be set:
 ```python
 params.decodingQuantFile = dq_file
 params.inFileRoot = input_files_root
+params.map_file = map_file  # Optional override for .map file, if not in input_files_root
 params.outFileRoot = output_files_root
 params.decodingModeString = 'array'
 params.usingCSFS = True

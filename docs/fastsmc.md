@@ -30,6 +30,8 @@ Note: default parameter values are likely to change in future versions.
                               	[mandatory]
   --outFileRoot               	Prefix of output file.
                               	[mandatory]
+  --mapFile                  	Optional override for .map file, if not in inFileRoot.
+                              	[optional]
   --hashing                  	Use of hashing to pre-process IBD segments. If off, no identification step will be performed.
                               	[default 1/on]
   --min_m arg (=1)		        Minimum match length (in cM).

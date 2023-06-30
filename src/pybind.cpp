@@ -124,12 +124,13 @@ PYBIND11_MODULE(asmc_python_bindings, m)
       .def_readwrite("foldedAscertainedCSFSmap", &DecodingQuantities::foldedAscertainedCSFSmap);
   py::class_<DecodingParams>(m, "DecodingParams")
       .def(py::init<std::string, std::string, std::string, int, int, std::string, bool, bool, bool, bool, float, bool,
-                    bool, bool, std::string, bool, bool, bool>(),
+                    bool, bool, std::string, bool, bool, bool, std::string>(),
            "in_file_root"_a, "dq_file"_a, "out_file_root"_a = "", "jobs"_a = 1, "job_ind"_a = 1,
            "decoding_mode_string"_a = "array", "decoding_sequence"_a = false, "using_CSFS"_a = true,
            "compress"_a = false, "use_ancestral"_a = false, "skip_CSFS_distance"_a = 0.f, "no_batches"_a = false,
            "do_posterior_sums"_a = false, "do_per_pair_posterior_mean"_a = false, "expected_coal_times_file"_a = "",
-           "within_only"_a = false, "do_major_minor_posterior_sums"_a = false, "do_per_pair_MAP"_a = false)
+           "within_only"_a = false, "do_major_minor_posterior_sums"_a = false, "do_per_pair_MAP"_a = false,
+           "map_file"_a = "")
       .def(py::init<>())
       .def(py::init<std::string, std::string, std::string, bool>(), "in_file_root"_a, "dq_file"_a,
            "out_file_root"_a, "FastSMC"_a = true)
@@ -137,6 +138,7 @@ PYBIND11_MODULE(asmc_python_bindings, m)
       .def("print_decoding_params", &DecodingParams::printDecodingParams)
       .def_readwrite("inFileRoot", &DecodingParams::inFileRoot)
       .def_readwrite("decodingQuantFile", &DecodingParams::decodingQuantFile)
+      .def_readwrite("mapFile", &DecodingParams::mapFile)
       .def_readwrite("outFileRoot", &DecodingParams::outFileRoot)
       .def_readwrite("jobs", &DecodingParams::jobs)
       .def_readwrite("jobInd", &DecodingParams::jobInd)

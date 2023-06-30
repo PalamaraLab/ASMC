@@ -78,7 +78,7 @@ The full set of command line options for `ASMC` is as follows:
 
 ```
 Mandatory:
-  --inFileRoot arg                Prefix of hap|haps|hap.gz|haps.gz and sample|samples file
+  --inFileRoot arg                Prefix of hap|haps|hap.gz|haps.gz, sample|samples, map|map.gz file
   --decodingQuantFile arg         Decoding quantities file
 
 Choose one of:
@@ -90,6 +90,7 @@ Choose one of:
 Optional:
   --outFileRoot arg               Output file for sum of posterior distribution
                                   over pairs (default: --hapsFileRoot argument)
+  --mapFile arg                   Optional override for map|map.gz file, if not in inFileRoot
   --jobs int (=0)                 Number of jobs being done in parallel
   --jobInd int (=0)               Job index (1..jobs)
   --mode string (=array)          Decoding mode. Choose from {sequence, array}.

@@ -100,15 +100,22 @@ private:
   void readHaps(std::string inFileRoot, bool foldToMinorAlleles, int jobID, int jobs,
                 std::vector<std::pair<unsigned long int, double>>& genetic_map);
 
-  void readMap(const std::string& inFileRoot);
+  /**
+   * Read Plink-format map file
+   * @param inFileRoot
+   * @param mapFile: optional direct path to map file, used if map file is not in inFileRoot
+   */
+  void readMap(const std::string& inFileRoot, const std::string& mapFile = "");
 
   /**
    * Subsumed functionality from FastSMC to read genetic map as a vector of pairs.
    * TODO: can this be harmonised with the other readMap method?
    * @param inFileRoot
+   * @param mapFile: optional direct path to map file, used if map file is not in inFileRoot
    * @return
    */
-  static std::vector<std::pair<unsigned long, double>> readMapFastSMC(const std::string& inFileRoot);
+  static std::vector<std::pair<unsigned long, double>> readMapFastSMC(const std::string& inFileRoot,
+                                                                      const std::string& mapFile = "");
 
   std::vector<int> totalSamplesCount;
   std::vector<int> derivedAlleleCounts;

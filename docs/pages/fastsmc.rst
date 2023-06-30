@@ -12,18 +12,17 @@ FastSMC
 
 -  `Relationship to ASMC <#relationship-to-asmc>`__
 
-The Fast Sequentially Markovian Coalescent (FastSMC) algorithm is an
-extension to the ASMC algorithm, adding an identification step by
-hashing (currently using an improved version of the GERMLINE algorithm).
-FastSMC is an accurate method to detect Identical-By-Descent segments
-which enables estimating the time to most recent common ancestor for IBD
-individuals, and provides an estimate of uncertainty for detected IBD
-regions.
+The FastSMC algorithm is an extension to the ASMC algorithm, adding an
+identification step by hashing (currently using an improved version of
+the GERMLINE algorithm). FastSMC is an accurate method to detect
+Identical-By-Descent segments which enables estimating the time to most
+recent common ancestor for IBD individuals, and provides an estimate of
+uncertainty for detected IBD regions.
 
 **This document is not intended as an extensive guide, a more detailed
 user manual is under development, data and annotations from the FastSMC
-paper can be
-found**\ `here <https://palamaralab.github.io/software/fastsmc/>`__\ **.**
+paper can be found**
+`here <https://palamaralab.github.io/software/fastsmc/>`__\ **.**
 
 Running FastSMC
 ---------------
@@ -49,6 +48,8 @@ change in future versions.
                                    [mandatory]
      --outFileRoot                 Prefix of output file.
                                    [mandatory]
+     --mapFile                     Optional override for .map file, if not in inFileRoot.
+                                   [optional]
      --hashing                     Use of hashing to pre-process IBD segments. If off, no identification step will be performed.
                                    [default 1/on]
      --min_m arg (=1)              Minimum match length (in cM).
@@ -135,15 +136,16 @@ mistakenly encoded as diploid rather than haploid. The file
 `CEU.demo <https://github.com/PalamaraLab/ASMC_data/tree/main/demographies>`__
 and CEU+UKBB decoding quantities
 `here <https://github.com/PalamaraLab/ASMC_data/tree/main/decoding_quantities>`__
-have now been fixed. They were generated using v2.2.1 of the
-`PrepareDecoding
-tool <https://github.com/PalamaraLab/PrepareDecoding/releases/tag/v2.2.1>`__,
-which also provides a simpler interface for computing decoding
-quantities as well as support for additional demographic models. Using
-these new decoding quantities with v1.2 of ASMC will tend to produce
-more recent estimates for TMRCAs compared to the decoding quantities
-distributed with v1.0 and v1.1. This should not have a substantial
-impact on most downstream analyses.
+have now been fixed. They were generated using
+`v2.2.1 <https://github.com/PalamaraLab/PrepareDecoding/releases/tag/v2.2.1>`__
+of the `PrepareDecoding
+tool <https://github.com/PalamaraLab/PrepareDecoding>`__, which also
+provides a simpler interface for computing decoding quantities as well
+as support for additional demographic models. Using these new decoding
+quantities with v1.2 of ASMC will tend to produce more recent estimates
+for TMRCAs compared to the decoding quantities distributed with v1.0 and
+v1.1. This should not have a substantial impact on most downstream
+analyses.
 
 Output format
 ~~~~~~~~~~~~~
