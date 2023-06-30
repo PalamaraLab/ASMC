@@ -169,3 +169,5 @@ dmypy.json
 .idea
 cmake-build-*
 build
+
+**/.uuid

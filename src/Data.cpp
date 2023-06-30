@@ -101,17 +101,18 @@ Data::Data(const DecodingParams& params)
 }
 
 // *** read genetic map
-vector<pair<unsigned long, double>> Data::readMapFastSMC(const string& inFileRoot)
+vector<pair<unsigned long, double>> Data::readMapFastSMC(const string& inFileRoot, const string& mapFile)
 {
-  std::string mapFile;
-  if (mapFile = inFileRoot + ".map.gz"; fs::is_regular_file(mapFile)) {
-  } else if (mapFile = inFileRoot + ".map"; fs::is_regular_file(mapFile)) {
+  std::string checkedMapFile;
+  if (checkedMapFile = mapFile; fs::is_regular_file(checkedMapFile)) {
+  } else if (checkedMapFile = inFileRoot + ".map.gz"; fs::is_regular_file(checkedMapFile)) {
+  } else if (checkedMapFile = inFileRoot + ".map"; fs::is_regular_file(checkedMapFile)) {
   } else {
     fmt::print(cerr, "ERROR. Could not find map file in {}.map.gz or {}.map\n", inFileRoot, inFileRoot);
     exit(1);
   }
 
-  auto map = asmc::GeneticMap(mapFile);
+  auto map = asmc::GeneticMap(checkedMapFile);
 
   const std::vector<unsigned long>& physicalPositions = map.getPhysicalPositions();
   const std::vector<double>& geneticPositions = map.getGeneticPositions();
@@ -145,24 +146,25 @@ int Data::sampleHypergeometric(int populationSize, int numberOfSuccesses, int sa
   return ret;
 }
 
-void Data::readMap(const std::string& inFileRoot)
+void Data::readMap(const std::string& inFileRoot, const std::string& mapFile)
 {
-  std::string mapFile;
-  if (mapFile = inFileRoot + ".map.gz"; fs::is_regular_file(mapFile)) {
-  } else if (mapFile = inFileRoot + ".map"; fs::is_regular_file(mapFile)) {
+  std::string checkedMapFile;
+  if (checkedMapFile = mapFile; fs::is_regular_file(checkedMapFile)) {
+  } else  if (checkedMapFile = inFileRoot + ".map.gz"; fs::is_regular_file(checkedMapFile)) {
+  } else if (checkedMapFile = inFileRoot + ".map"; fs::is_regular_file(checkedMapFile)) {
   } else {
     fmt::print(cerr, "ERROR. Could not find map file in {}.map.gz or {}.map\n", inFileRoot, inFileRoot);
     exit(1);
   }
-  auto map = asmc::PlinkMap(mapFile);
+  auto map = asmc::PlinkMap(checkedMapFile);
 
   if (map.getNumSites() != static_cast<unsigned long>(sites)) {
     throw std::runtime_error(
-        fmt::format("ERROR. Expected map {} to contain {} sites, but found {}\n", mapFile, sites, map.getNumSites()));
+        fmt::format("ERROR. Expected map {} to contain {} sites, but found {}\n", checkedMapFile, sites, map.getNumSites()));
   }
 
   if (map.getGeneticPositions().empty()) {
-    throw std::runtime_error(fmt::format("ERROR. Expected map {} to contain a column of genetic positions\n", mapFile));
+    throw std::runtime_error(fmt::format("ERROR. Expected map {} to contain a column of genetic positions\n", checkedMapFile));
   }
 
   SNP_IDs = map.getSnpIds();

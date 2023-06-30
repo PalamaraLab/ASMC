@@ -33,6 +33,7 @@ private:
 public:
   std::string inFileRoot;
   std::string decodingQuantFile;
+  std::string mapFile;
   std::string outFileRoot;
   int jobs = 1;
   int jobInd = 1;
@@ -116,7 +117,8 @@ public:
                           bool _useAncestral = false, float _skipCSFSdistance = 0.f, bool _noBatches = false,
                           bool _doPosteriorSums = false, bool _doPerPairPosteriorMean = false,
                           std::string _expectedCoalTimesFile = "", bool _withinOnly = false,
-                          bool _doMajorMinorPosteriorSums = false, bool _doPerPairMAP = false);
+                          bool _doMajorMinorPosteriorSums = false, bool _doPerPairMAP = false,
+                          std::string _mapFile = "");
 
   /**
    * Minimal constructor that sets defaults for FastSMC. An error will occur if you try to use this constructor for
