@@ -89,6 +89,25 @@ class TestASMCDecodingParams(unittest.TestCase):
         for i in range(len(d)):
             self.assertEqual(len(d[i]), data.sites)
 
+    def test_with_explicit_map_file(self):
+        inFileRoot = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300.array')
+        mapFile = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300.map.gz')
+        decodingQuantFile = str(data_dir / 'decoding_quantities' / '30-100-2000_CEU.decodingQuantities.gz')
+        params = DecodingParams(inFileRoot, decodingQuantFile, compress=True,
+                                skip_CSFS_distance=float('nan'), map_file=mapFile)
+
+        self.assertEqual(params.compress, True)
+        self.assertEqual(params.skipCSFSdistance, float('inf'))
+
+        data = Data(params)
+        hmm = HMM(data, params)
+
+        p = hmm.makePairObs(1, 0, 2, 0)
+        d = hmm.decode(p)
+        self.assertEqual(len(d), len(hmm.getDecodingQuantities().expectedTimes))
+        for i in range(len(d)):
+            self.assertEqual(len(d[i]), data.sites)
+
 
 class TestASMCDecodePairsAPI(unittest.TestCase):
     def test_decode_pairs_array(self):
