@@ -17,9 +17,9 @@ env:
   CIBW_ARCHS_LINUX: auto64
   CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
   CIBW_BEFORE_ALL_LINUX: "yum -y groupinstall 'Development Tools' && yum -y install git"
-  CIBW_BEFORE_ALL_MACOS: brew install libomp llvm@16 pkg-config
+  CIBW_BEFORE_ALL_MACOS: brew install libomp llvm@17 pkg-config
   CIBW_BEFORE_BUILD: pip install --upgrade pip setuptools wheel ninja numpy cython
-  CIBW_ENVIRONMENT_MACOS: CXX="$(brew --prefix llvm@16)/bin/clang++"
+  CIBW_ENVIRONMENT_MACOS: CXX="$(brew --prefix llvm@17)/bin/clang++"
   MACOSX_DEPLOYMENT_TARGET: 10.15
 
 jobs:
