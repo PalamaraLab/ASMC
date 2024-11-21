@@ -41,13 +41,13 @@ jobs:
 
       - name: install dependencies
         run: |
-          brew install libomp llvm@17 pkg-config
+          brew install libomp llvm pkg-config
 
       - name: make build directory
         run: mkdir -p build_dir
 
       - name: cmake configure
-        run: cmake .. -DCMAKE_CXX_COMPILER=$(brew --prefix llvm@17)/bin/clang++ -DCMAKE_C_COMPILER=$(brew --prefix llvm@17)/bin/clang
+        run: cmake .. -DCMAKE_CXX_COMPILER=$(brew --prefix llvm)/bin/clang++ -DCMAKE_C_COMPILER=$(brew --prefix llvm)/bin/clang
         working-directory: build_dir
 
       - name: cmake build
