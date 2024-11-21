@@ -14,13 +14,13 @@ jobs:
 
   build-and-test:
     name: Unit tests on Ubuntu
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     if:  ${{ github.event_name == 'pull_request' || github.repository == 'PalamaraLab/ASMC' }}
 
     steps:
 
       - name: checkout repo & submodules
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: true
           fetch-depth: 0
@@ -42,7 +42,7 @@ jobs:
         working-directory: build_dir
 
       - name: cmake build
-        run: cmake --build . --parallel 2 --target ASMC_unit_tests
+        run: cmake --build . --parallel 4 --target ASMC_unit_tests
         working-directory: build_dir
 
       - name: cmake test
