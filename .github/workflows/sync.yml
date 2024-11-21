@@ -1,0 +1,49 @@
+name: Sync
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  private-to-public:
+    if: github.repository == 'PalamaraLab/ASMC_dev'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout private repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Mirror main to public repo
+        run: |
+          remote_repo="https://fcooper8472:${{ secrets.DEPLOY_ACCESS_TOKEN }}@github.com/PalamaraLab/ASMC.git"
+          git fetch "${remote_repo}" main
+          if ! git diff --quiet HEAD FETCH_HEAD; then
+            git push "${remote_repo}" HEAD:main --follow-tags --force
+            echo "Changes detected and pushed to public repo."
+          else
+            echo "No changes detected. No push needed."
+          fi
+
+  public-to-private:
+    if: github.repository == 'PalamaraLab/ASMC'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout public repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Mirror main to private repo
+        run: |
+          remote_repo="https://fcooper8472:${{ secrets.DEPLOY_ACCESS_TOKEN }}@github.com/PalamaraLab/ASMC_dev.git"
+          git fetch "${remote_repo}" main
+          if ! git diff --quiet HEAD FETCH_HEAD; then
+            git push "${remote_repo}" HEAD:main --follow-tags --force
+            echo "Changes detected and pushed to private repo."
+          else
+            echo "No changes detected. No push needed."
+          fi
