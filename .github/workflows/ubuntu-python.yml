@@ -1,4 +1,4 @@
-name: Python 3.8 3.11
+name: Python tests on Ubuntu
 
 on:
   push:
@@ -13,7 +13,7 @@ jobs:
 
   build-and-test:
     name: Unit tests via Python on Ubuntu
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     if: ${{ github.event_name == 'pull_request' || github.repository == 'PalamaraLab/ASMC' }}
 
     strategy:
