@@ -88,6 +88,7 @@ set(ASMC_source
         ${ASMC_source_dir}/FileUtils.cpp
         ${ASMC_source_dir}/Individual.cpp
         ${ASMC_source_dir}/MemoryUtils.cpp
+        ${ASMC_source_dir}/Simd.cpp
         ${ASMC_source_dir}/StringUtils.cpp
         ${ASMC_source_dir}/Timer.cpp
         ${ASMC_source_dir}/ASMC.cpp
@@ -107,6 +108,7 @@ set(ASMC_headers
         ${ASMC_source_dir}/FileUtils.hpp
         ${ASMC_source_dir}/Individual.hpp
         ${ASMC_source_dir}/MemoryUtils.hpp
+        ${ASMC_source_dir}/Simd.hpp
         ${ASMC_source_dir}/StringUtils.hpp
         ${ASMC_source_dir}/Timer.hpp
         ${ASMC_source_dir}/ASMC.hpp
@@ -138,6 +140,7 @@ set(ASMC_unit_tests
         ${ASMC_test_dir}/test_hmm_utils.cpp
         ${ASMC_test_dir}/test_decoding_params.cpp
         ${ASMC_test_dir}/test_decoding_quantities.cpp
+        ${ASMC_test_dir}/test_SIMD.cpp
         )
 
 set(ASMC_regression
