@@ -218,6 +218,22 @@ target_link_libraries(ASMC PRIVATE OpenMP::OpenMP_CXX)
 find_package(fmt CONFIG REQUIRED)
 target_link_libraries(ASMC PUBLIC fmt::fmt)
 
+include(FetchContent)
+
+FetchContent_Declare(
+        highway
+        GIT_REPOSITORY https://github.com/google/highway.git
+        GIT_TAG        457c891775a7397bdb0376bb1031e6e027af1c48 # v1.2.0
+)
+
+# Make the content available
+FetchContent_MakeAvailable(highway)
+
+# Link Highway to your target
+target_link_libraries(ASMC PRIVATE hwy)
+target_compile_definitions(ASMC PRIVATE HWY_DYNAMIC_DISPATCH=1)
+
+
 find_package(range-v3 CONFIG REQUIRED)
 message(STATUS "Found range-v3 ${range-v3_VERSION}")
 target_link_libraries(ASMC_data_module PRIVATE Eigen3::Eigen fmt::fmt range-v3 ZLIB::ZLIB)
