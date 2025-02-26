@@ -206,11 +206,6 @@ target_link_libraries(ASMC PRIVATE Boost::boost Boost::iostreams Boost::program_
 find_package(ZLIB REQUIRED)
 target_link_libraries(ASMC PRIVATE ZLIB::ZLIB)
 
-# openmp is a required dependency
-find_package(OpenMP REQUIRED)
-add_definitions(-DHAVE_OPENMP)
-target_link_libraries(ASMC PRIVATE OpenMP::OpenMP_CXX)
-
 include(FetchContent)
 set(FETCHCONTENT_QUIET ON)
 

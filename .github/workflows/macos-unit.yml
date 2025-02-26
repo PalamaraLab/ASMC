@@ -30,24 +30,15 @@ jobs:
           submodules: true
           fetch-depth: 0
 
-      - name: cache vcpkg installed packages
-        uses: actions/cache@v4
-        id: cache
-        with:
-          path: |
-            vcpkg/
-            build_dir/vcpkg_installed/
-          key: ${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg/CHANGELOG.md') }}
-
       - name: install dependencies
         run: |
-          brew install libomp llvm pkg-config
+          brew install boost zlib
 
       - name: make build directory
         run: mkdir -p build_dir
 
       - name: cmake configure
-        run: cmake .. -DCMAKE_CXX_COMPILER=$(brew --prefix llvm)/bin/clang++ -DCMAKE_C_COMPILER=$(brew --prefix llvm)/bin/clang
+        run: cmake ..
         working-directory: build_dir
 
       - name: cmake build
