@@ -27,6 +27,11 @@ jobs:
           submodules: true
           fetch-depth: 0
 
+      - name: install deps
+        run: |
+          sudo apt -y update
+          sudo apt -y install libboost-iostreams-dev libboost-program-options-dev zlib1g-dev
+
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
