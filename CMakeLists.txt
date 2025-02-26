@@ -77,6 +77,7 @@ target_include_directories(ASMC_data_module PUBLIC ${ASMC_data_module_dir}/src)
 set(ASMC_source
         ${ASMC_source_dir}/HMM.cpp
         ${ASMC_source_dir}/HmmUtils.cpp
+        ${ASMC_source_dir}/BinaryDataReader.cpp
         ${ASMC_source_dir}/Data.cpp
         ${ASMC_source_dir}/DecodingParams.cpp
         ${ASMC_source_dir}/DecodingQuantities.cpp
@@ -102,6 +103,7 @@ set(ASMC_headers
         ${ASMC_source_dir}/DecodingQuantities.hpp
         ${ASMC_source_dir}/FastSMC.hpp
         ${ASMC_source_dir}/FileUtils.hpp
+        ${ASMC_source_dir}/IbdPairDataLine.hpp
         ${ASMC_source_dir}/Individual.hpp
         ${ASMC_source_dir}/MemoryUtils.hpp
         ${ASMC_source_dir}/Simd.hpp
@@ -200,10 +202,6 @@ endif ()
 find_package(Boost REQUIRED COMPONENTS iostreams program_options)
 target_link_libraries(ASMC PRIVATE Boost::boost Boost::iostreams Boost::program_options)
 
-# Eigen is required
-find_package(Eigen3 CONFIG REQUIRED)
-target_link_libraries(ASMC PUBLIC Eigen3::Eigen)
-
 # zlib is required (at least on Linux) for boost iostreams
 find_package(ZLIB REQUIRED)
 target_link_libraries(ASMC PRIVATE ZLIB::ZLIB)
@@ -213,29 +211,51 @@ find_package(OpenMP REQUIRED)
 add_definitions(-DHAVE_OPENMP)
 target_link_libraries(ASMC PRIVATE OpenMP::OpenMP_CXX)
 
-# fmt is required for efficient string formatting
-find_package(fmt CONFIG REQUIRED)
-target_link_libraries(ASMC PUBLIC fmt::fmt)
-
 include(FetchContent)
+set(FETCHCONTENT_QUIET ON)
 
+# Fetch Eigen3
+set(EIGEN_BUILD_TESTING OFF CACHE BOOL "Disable range-v3 tests")
+FetchContent_Declare(
+        eigen
+        GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+        GIT_TAG        68f4e58cfacc686583d16cff90361f0b43bc2c1b # Latest commit on 3.4 branch
+)
+FetchContent_MakeAvailable(eigen)
+target_link_libraries(ASMC PUBLIC Eigen3::Eigen)
+
+# Fetch fmt
+set(FMT_TEST OFF CACHE BOOL "Disable fmt tests")
+FetchContent_Declare(
+        fmt
+        GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+        GIT_TAG        9cf9f38eded63e5e0fb95cd536ba51be601d7fa2 # v11.1.3
+)
+FetchContent_MakeAvailable(fmt)
+target_link_libraries(ASMC PRIVATE fmt::fmt)
+
+# Fetch range-v3
+set(RANGE_V3_TESTS OFF CACHE BOOL "Disable range-v3 tests")
+FetchContent_Declare(
+        range-v3
+        GIT_REPOSITORY https://github.com/ericniebler/range-v3.git
+        GIT_TAG        a81477931a8aa2ad025c6bda0609f38e09e4d7ec  # v0.12.0
+)
+FetchContent_MakeAvailable(range-v3)
+
+# Fetch Highway
+set(HWY_ENABLE_TESTS OFF CACHE BOOL "Disable Highway tests")
 FetchContent_Declare(
         highway
         GIT_REPOSITORY https://github.com/google/highway.git
         GIT_TAG        457c891775a7397bdb0376bb1031e6e027af1c48 # v1.2.0
 )
-
-# Make the content available
 FetchContent_MakeAvailable(highway)
-
-# Link Highway to your target
 target_link_libraries(ASMC PRIVATE hwy)
 target_compile_definitions(ASMC PRIVATE HWY_DYNAMIC_DISPATCH=1)
 
-
-find_package(range-v3 CONFIG REQUIRED)
-message(STATUS "Found range-v3 ${range-v3_VERSION}")
 target_link_libraries(ASMC_data_module PRIVATE Eigen3::Eigen fmt::fmt range-v3 ZLIB::ZLIB)
+target_link_libraries(ASMC_unit_tests PRIVATE fmt::fmt)
 
 
 # Optionally run regression tests to ensure core functionality remains unchanged
@@ -244,7 +264,7 @@ if (NOT ASMC_NO_PYTHON)
     if (ASMC_REGRESSION_TESTING)
 
         # Python is required for running regression tests
-        find_package(Python3 3.6 COMPONENTS Interpreter REQUIRED)
+        find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
 
         add_custom_target(
                 Regression
