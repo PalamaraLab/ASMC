@@ -224,7 +224,7 @@ set(FMT_TEST OFF CACHE BOOL "Disable fmt tests")
 FetchContent_Declare(
         fmt
         GIT_REPOSITORY https://github.com/fmtlib/fmt.git
-        GIT_TAG        9cf9f38eded63e5e0fb95cd536ba51be601d7fa2 # v11.1.3
+        GIT_TAG        e69e5f977d458f2650bb346dadf2ad30c5320281 # v10.2.1
 )
 FetchContent_MakeAvailable(fmt)
 target_link_libraries(ASMC PRIVATE fmt::fmt)
