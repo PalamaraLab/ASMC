@@ -199,8 +199,9 @@ if (ASMC_TESTING)
 endif ()
 
 # boost as a required dependency for ASMC
-find_package(Boost REQUIRED COMPONENTS iostreams program_options)
-target_link_libraries(ASMC PRIVATE Boost::boost Boost::iostreams Boost::program_options)
+find_package(Boost CONFIG REQUIRED COMPONENTS iostreams program_options)
+target_link_libraries(ASMC PRIVATE Boost::iostreams Boost::program_options)
+target_link_libraries(ASMC PUBLIC Boost::boost)
 
 # zlib is required (at least on Linux) for boost iostreams
 find_package(ZLIB REQUIRED)
