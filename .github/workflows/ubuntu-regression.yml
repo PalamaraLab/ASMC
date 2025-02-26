@@ -15,7 +15,7 @@ jobs:
     name: Regression test on Ubuntu
     runs-on: ubuntu-24.04
     env:
-      CXX: g++-10
+      CXX: g++-14
     if: ${{ github.event_name == 'pull_request' || github.repository == 'PalamaraLab/ASMC' }}
 
     steps:
