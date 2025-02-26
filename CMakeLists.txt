@@ -28,6 +28,19 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 #export compiler flags for code completion engines
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 
+include(FetchContent)
+
+option(ASMC_PYTHON_BINDINGS "Whether to build the python bindings" OFF)
+if (ASMC_PYTHON_BINDINGS)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    FetchContent_Declare(
+            pybind11
+            GIT_REPOSITORY https://github.com/pybind/pybind11
+            GIT_TAG 7c33cdc2d39c7b99a122579f53bc94c8eb3332ff # Version 2.13.5
+    )
+    FetchContent_MakeAvailable(pybind11)
+endif ()
+
 # Set global compiler warnings for debug builds
 if(CMAKE_BUILD_TYPE MATCHES "Deb")
     if (MSVC)
@@ -146,30 +159,15 @@ set(ASMC_regression
         ${ASMC_test_dir}/test_fastsmc_regression.cpp
         )
 
-if (NOT ASMC_NO_PYTHON)
-    option(ASMC_PYTHON_BINDINGS "Whether to build the ASMC python bindings" OFF)
-    if (EXISTS ${CMAKE_SOURCE_DIR}/pybind11/LICENSE)
-        set(ASMC_PYTHON_BINDINGS ON)
-    endif ()
-    if (ASMC_PYTHON_BINDINGS)
-        find_package(Python3 3.6 COMPONENTS Interpreter Development.Module REQUIRED)
-        add_subdirectory(pybind11)
-        pybind11_add_module(asmc_python_bindings ${ASMC_source_dir}/pybind.cpp)
-        target_link_libraries(asmc_python_bindings PRIVATE ASMC)
-    endif ()
+if (ASMC_PYTHON_BINDINGS)
+    pybind11_add_module(asmc_python_bindings ${ASMC_source_dir}/pybind.cpp)
+    target_link_libraries(asmc_python_bindings PRIVATE ASMC)
 endif ()
 
 # The main ASMC library
 add_library(ASMC ${ASMC_source} ${ASMC_headers})
 target_include_directories(ASMC PUBLIC ${ASMC_source_dir})
 target_link_libraries(ASMC PRIVATE ASMC_data_module)
-
-# Link against std filesystem on GCC < 8.4
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8.4)
-        target_link_libraries(ASMC PRIVATE stdc++fs)
-    endif ()
-endif ()
 
 # The main ASMC executable
 add_executable(ASMC_exe ${ASMC_main})
@@ -182,21 +180,6 @@ target_link_libraries(FastSMC_exe PRIVATE ASMC)
 # The main convertBinary executable
 add_executable(convertBinary_exe ${convertBinary_main})
 target_link_libraries(convertBinary_exe PRIVATE ASMC)
-
-
-if (ASMC_TESTING)
-    enable_testing()
-
-    add_executable(ASMC_unit_tests ${ASMC_unit_tests})
-    target_include_directories(ASMC_unit_tests PRIVATE ${ASMC_test_dir})
-    target_link_libraries(ASMC_unit_tests PRIVATE ASMC)
-    add_test(Asmc_unit_tests ASMC_unit_tests)
-
-    add_executable(ASMC_regression ${ASMC_regression})
-    target_include_directories(ASMC_regression PRIVATE ${ASMC_test_dir})
-    target_link_libraries(ASMC_regression PRIVATE ASMC ASMC_data_module)
-    add_test(regression ASMC_regression)
-endif ()
 
 # boost as a required dependency for ASMC
 find_package(Boost CONFIG REQUIRED COMPONENTS iostreams program_options)
@@ -251,7 +234,21 @@ target_link_libraries(ASMC PRIVATE hwy)
 target_compile_definitions(ASMC PRIVATE HWY_DYNAMIC_DISPATCH=1)
 
 target_link_libraries(ASMC_data_module PRIVATE Eigen3::Eigen fmt::fmt range-v3 ZLIB::ZLIB)
-target_link_libraries(ASMC_unit_tests PRIVATE fmt::fmt)
+
+
+if (ASMC_TESTING)
+    enable_testing()
+
+    add_executable(ASMC_unit_tests ${ASMC_unit_tests})
+    target_include_directories(ASMC_unit_tests PRIVATE ${ASMC_test_dir})
+    target_link_libraries(ASMC_unit_tests PRIVATE ASMC fmt::fmt)
+    add_test(Asmc_unit_tests ASMC_unit_tests)
+
+    add_executable(ASMC_regression ${ASMC_regression})
+    target_include_directories(ASMC_regression PRIVATE ${ASMC_test_dir})
+    target_link_libraries(ASMC_regression PRIVATE ASMC ASMC_data_module)
+    add_test(regression ASMC_regression)
+endif ()
 
 
 # Optionally run regression tests to ensure core functionality remains unchanged
@@ -274,10 +271,10 @@ if (NOT ASMC_NO_PYTHON)
 endif ()
 
 # Need position independent code for Python bindings
-if (ASMC_PYTHON_BINDINGS)
-    set_target_properties(ASMC PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
-    set_target_properties(ASMC_data_module PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
-endif ()
+#if (ASMC_PYTHON_BINDINGS)
+#    set_target_properties(ASMC PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+#    set_target_properties(ASMC_data_module PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+#endif ()
 
 # Clang tidy as optional static analyzer
 option(Template_USE_CLANG_TIDY "Use clang tidy for static analysis" OFF)

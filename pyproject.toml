@@ -1,0 +1,53 @@
+[build-system]
+requires = ["scikit-build-core>=0.10.7", "pybind11"]
+build-backend = "scikit_build_core.build"
+
+[project]
+dynamic = ["readme"]
+name = "asmc-asmc"
+version = "1.3.1"
+description = "ASMC is a method to efficiently estimate pairwise coalescence time along the genome"
+readme-content-type = "text/markdown"
+authors = [
+    { name = "PalamaraLab (https://palamaralab.github.io/)" }
+]
+requires-python = ">=3.9"
+
+dependencies = [
+    'jupyter',
+    'numpy',
+    'pandas',
+    'pandas',
+    'matplotlib',
+    'asmc-preparedecoding',
+]
+
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[tool.scikit-build]
+cmake.args = [
+    "-DASMC_TESTING=OFF",
+    "-DASMC_NO_PYTHON=OFF",
+    "-DASMC_PYTHON_BINDINGS=ON",
+]
+build.verbose = true
+cmake.build-type = "Release"
+
+metadata.readme.provider = "scikit_build_core.metadata.fancy_pypi_readme"
+[tool.hatch.metadata.hooks.fancy-pypi-readme]
+content-type = "text/markdown"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "PyPI_README.md"
+
+[[tool.hatch.metadata.hooks.fancy-pypi-readme.fragments]]
+path = "RELEASE_NOTES.md"
