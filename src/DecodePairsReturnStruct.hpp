@@ -16,11 +16,7 @@
 #ifndef FASTSMC_DECODE_PAIRS_RETURN_STRUCT_HPP
 #define FASTSMC_DECODE_PAIRS_RETURN_STRUCT_HPP
 
-#pragma clang diagnostic push
-#pragma ide diagnostic ignored "cppcoreguidelines-non-private-member-variables-in-classes"
-
 #include <Eigen/Core>
-#include <fmt/format.h>
 
 #include <string>
 #include <tuple>
@@ -124,5 +120,3 @@ public:
 };
 
 #endif // FASTSMC_DECODE_PAIRS_RETURN_STRUCT_HPP
-
-#pragma clang diagnostic pop

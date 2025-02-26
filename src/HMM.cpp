@@ -32,6 +32,7 @@
 #include "AvxDefinitions.hpp"
 #include "HmmUtils.hpp"
 #include "MemoryUtils.hpp"
+#include "Simd.hpp"
 #include "StringUtils.hpp"
 #include "Timer.hpp"
 
@@ -67,6 +68,7 @@ HMM::HMM(Data _data, const DecodingParams& _decodingParams, int _scalingSkip)
     : data(std::move(_data)), m_decodingQuant(_decodingParams.decodingQuantFile), decodingParams(_decodingParams),
       scalingSkip(_scalingSkip), noBatches(_decodingParams.noBatches)
 {
+
   if (decodingParams.hashing && !decodingParams.FastSMC) {
     cerr << "Identification only is not yet supported Cannot have hashing==true and FastSMC==false.\n";
     exit(1);
@@ -84,6 +86,7 @@ HMM::HMM(Data _data, const DecodingParams& _decodingParams, int _scalingSkip)
   prepareEmissions();
 
   m_batchSize = decodingParams.batchSize;
+  asmc::validateBatchSize(m_batchSize);
 
   for (int i = 0; i < m_batchSize; i++) {
     fromBatch.push_back(0);

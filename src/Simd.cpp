@@ -49,7 +49,7 @@ void validateBatchSize_hwy(const int batchSize)
 
   // Check if batchSize is divisible by the lane count
   if (batchSize % lanes != 0) {
-    throw std::invalid_argument(
+    throw std::runtime_error(
         fmt::format("Error: the batch size ({}) must be a multiple of the SIMD lane width ({})", batchSize, lanes));
   }
 }

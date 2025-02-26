@@ -20,7 +20,6 @@
 #include "FileUtils.hpp"
 
 #include <Eigen/Core>
-#include <fmt/format.h>
 
 #include <sstream>
 
