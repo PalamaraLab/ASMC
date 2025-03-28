@@ -4,8 +4,6 @@
 cmake_minimum_required(VERSION 3.15)
 message(STATUS "CMake version: ${CMAKE_VERSION}")
 
-include(cmake/CheckDataModule.cmake)
-
 project(asmc LANGUAGES CXX VERSION 1.3.1)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -56,7 +54,7 @@ include(cmake/SIMD.cmake)
 set(ASMC_exe_dir ${CMAKE_CURRENT_SOURCE_DIR}/exe)
 set(ASMC_source_dir ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(ASMC_test_dir ${CMAKE_CURRENT_SOURCE_DIR}/test)
-set(ASMC_data_module_dir ${CMAKE_CURRENT_SOURCE_DIR}/DataModule)
+set(ASMC_data_module_dir ${CMAKE_CURRENT_SOURCE_DIR}/src/data_module)
 set(ASMC_data_dir ${CMAKE_CURRENT_SOURCE_DIR}/ASMC_data)
 add_definitions(-DASMC_TEST_DIR=\"${ASMC_test_dir}\")
 add_definitions(-DASMC_DATA_DIR=\"${ASMC_data_dir}\")
@@ -69,23 +67,23 @@ if (NOT EXISTS ${ASMC_data_dir}/README.md)
 endif ()
 
 set(ASMC_data_module_source
-        ${ASMC_data_module_dir}/src/GeneticMap.cpp
-        ${ASMC_data_module_dir}/src/PlinkMap.cpp
-        ${ASMC_data_module_dir}/src/utils/FileUtils.cpp
-        ${ASMC_data_module_dir}/src/utils/StringUtils.cpp
+        ${ASMC_data_module_dir}/GeneticMap.cpp
+        ${ASMC_data_module_dir}/PlinkMap.cpp
+        ${ASMC_data_module_dir}/utils/FileUtils.cpp
+        ${ASMC_data_module_dir}/utils/StringUtils.cpp
         )
 
 set(ASMC_data_module_headers
-        ${ASMC_data_module_dir}/src/GeneticMap.hpp
-        ${ASMC_data_module_dir}/src/PlinkMap.hpp
-        ${ASMC_data_module_dir}/src/utils/FileUtils.hpp
-        ${ASMC_data_module_dir}/src/utils/StringUtils.hpp
-        ${ASMC_data_module_dir}/src/utils/VectorUtils.hpp
+        ${ASMC_data_module_dir}/GeneticMap.hpp
+        ${ASMC_data_module_dir}/PlinkMap.hpp
+        ${ASMC_data_module_dir}/utils/FileUtils.hpp
+        ${ASMC_data_module_dir}/utils/StringUtils.hpp
+        ${ASMC_data_module_dir}/utils/VectorUtils.hpp
         )
 
 # The ASMC Data Module library
 add_library(ASMC_data_module ${ASMC_data_module_source} ${ASMC_data_module_headers})
-target_include_directories(ASMC_data_module PUBLIC ${ASMC_data_module_dir}/src)
+target_include_directories(ASMC_data_module PUBLIC ${ASMC_data_module_dir})
 
 set(ASMC_source
         ${ASMC_source_dir}/HMM.cpp
