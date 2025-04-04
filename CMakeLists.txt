@@ -26,17 +26,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 #export compiler flags for code completion engines
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 
-include(FetchContent)
-
 option(ASMC_PYTHON_BINDINGS "Whether to build the python bindings" OFF)
 if (ASMC_PYTHON_BINDINGS)
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-    FetchContent_Declare(
-            pybind11
-            GIT_REPOSITORY https://github.com/pybind/pybind11
-            GIT_TAG 7c33cdc2d39c7b99a122579f53bc94c8eb3332ff # Version 2.13.5
-    )
-    FetchContent_MakeAvailable(pybind11)
 endif ()
 
 # Set global compiler warnings for debug builds
@@ -157,11 +149,6 @@ set(ASMC_regression
         ${ASMC_test_dir}/test_fastsmc_regression.cpp
         )
 
-if (ASMC_PYTHON_BINDINGS)
-    pybind11_add_module(asmc_python_bindings ${ASMC_source_dir}/pybind.cpp)
-    target_link_libraries(asmc_python_bindings PRIVATE ASMC)
-endif ()
-
 # The main ASMC library
 add_library(ASMC ${ASMC_source} ${ASMC_headers})
 target_include_directories(ASMC PUBLIC ${ASMC_source_dir})
@@ -221,7 +208,9 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(range-v3)
 
 # Fetch Highway
-set(HWY_ENABLE_TESTS OFF CACHE BOOL "Disable Highway tests")
+set(HWY_ENABLE_TESTS OFF CACHE BOOL "Disable Highway tests" FORCE)
+set(HWY_ENABLE_CONTRIB OFF CACHE BOOL "Disable Highway contrib" FORCE)
+set(HWY_ENABLE_EXAMPLES OFF CACHE BOOL "Disable Highway examples" FORCE)
 FetchContent_Declare(
         highway
         GIT_REPOSITORY https://github.com/google/highway.git
@@ -233,7 +222,31 @@ target_compile_definitions(ASMC PRIVATE HWY_DYNAMIC_DISPATCH=1)
 
 target_link_libraries(ASMC_data_module PRIVATE Eigen3::Eigen fmt::fmt range-v3 ZLIB::ZLIB)
 
+# Python bindings
+if (ASMC_PYTHON_BINDINGS)
+    option(ASMC_BUILDING_FROM_PYPROJECT "Are we building from pyproject.toml (pip install)?" OFF)
 
+    if(ASMC_BUILDING_FROM_PYPROJECT)
+        message(STATUS "Using pybind11 from pyproject.toml build environment")
+        find_package(pybind11 REQUIRED)
+    else()
+        message(STATUS "Using FetchContent to get pybind11")
+        include(FetchContent)
+        FetchContent_Declare(
+                pybind11
+                GIT_REPOSITORY https://github.com/pybind/pybind11.git
+                GIT_TAG a2e59f0e7065404b44dfe92a28aca47ba1378dc4 # Version 2.13.6
+        )
+        FetchContent_MakeAvailable(pybind11)
+    endif()
+
+    pybind11_add_module(asmc_python_bindings ${ASMC_source_dir}/pybind.cpp)
+    target_link_libraries(asmc_python_bindings PRIVATE ASMC)
+    install(TARGETS asmc_python_bindings LIBRARY DESTINATION asmc/asmc)
+endif ()
+
+
+# Testing targets
 if (ASMC_TESTING)
     enable_testing()
 
@@ -248,31 +261,6 @@ if (ASMC_TESTING)
     add_test(regression ASMC_regression)
 endif ()
 
-
-# Optionally run regression tests to ensure core functionality remains unchanged
-if (NOT ASMC_NO_PYTHON)
-    option(ASMC_REGRESSION_TESTING "Whether to generate regression testing target" OFF)
-    if (ASMC_REGRESSION_TESTING)
-
-        # Python is required for running regression tests
-        find_package(Python3 3.9 COMPONENTS Interpreter REQUIRED)
-
-        add_custom_target(
-                Regression
-                COMMAND ${Python3_EXECUTABLE} regression_test.py $<TARGET_FILE:ASMC_exe>
-                DEPENDS ASMC_exe
-                COMMENT "Running ASMC regression test"
-                WORKING_DIRECTORY ${ASMC_test_dir}
-        )
-
-    endif ()
-endif ()
-
-# Need position independent code for Python bindings
-#if (ASMC_PYTHON_BINDINGS)
-#    set_target_properties(ASMC PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
-#    set_target_properties(ASMC_data_module PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
-#endif ()
 
 # Clang tidy as optional static analyzer
 option(Template_USE_CLANG_TIDY "Use clang tidy for static analysis" OFF)
