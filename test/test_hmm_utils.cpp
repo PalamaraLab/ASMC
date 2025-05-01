@@ -19,8 +19,8 @@
 #include <string>
 #include <vector>
 
-#include "AvxDefinitions.hpp"
 #include "HmmUtils.hpp"
+#include "Simd.hpp"
 
 #include "Eigen/Core"
 
@@ -230,8 +230,8 @@ TEST_CASE("test HMM utility free functions", "[HmmUtils]")
 
   SECTION("test calculateScalingBatch")
   {
-    // We need to make sure that this test will work independent of VECX and which AVX/SSE instructions are being used
-    const int batchSize = std::max<int>(2, 2 * VECX);
+    // We need to make sure that this test will work independent of the number of SIMD lanes being used
+    const int batchSize = std::max<int>(2, 2 * asmc::getNumSimdLanes());
     const int numStates = 2;
 
     Eigen::ArrayXf data(batchSize * numStates);
@@ -260,8 +260,8 @@ TEST_CASE("test HMM utility free functions", "[HmmUtils]")
 
   SECTION("test applyScalingBatch")
   {
-    // We need to make sure that this test will work independent of VECX and which AVX/SSE instructions are being used
-    const int batchSize = std::max<int>(2, 2 * VECX);
+    // We need to make sure that this test will work independent of the number of SIMD lanes being used
+    const int batchSize = std::max<int>(2, 2 * asmc::getNumSimdLanes());
     const int numStates = 2;
 
     Eigen::ArrayXf data(batchSize * numStates);
