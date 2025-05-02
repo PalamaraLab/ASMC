@@ -77,6 +77,13 @@ void calculateScalingBatch(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::Arr
 void applyScalingBatch(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::ArrayXf> scalings, int batchSize,
                        int numStates);
 
+/**
+ * Scales the alpha buffer by beta, accumulates into scale, normalizes scale,
+ * and applies scale to alpha.
+ */
+void normalizeAlphaWithBeta(Eigen::Ref<Eigen::ArrayXf> alpha, Eigen::Ref<Eigen::ArrayXf> beta,
+                            Eigen::Ref<Eigen::ArrayXf> scale, int batchSize, int numStates, int from, int to);
+
 } // namespace asmc
 
 #endif // ASMC_SIMD

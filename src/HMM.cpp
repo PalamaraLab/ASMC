@@ -668,8 +668,9 @@ void HMM::runLastBatch(vector<PairObservations>& obsBatch)
 // decode a batch
 void HMM::decodeBatch(const vector<PairObservations>& obsBatch, const unsigned from, const unsigned to)
 {
-
   int curBatchSize = static_cast<int>(obsBatch.size());
+
+  asmc::validateBatchSize(curBatchSize);
 
   Eigen::ArrayXf obsIsZeroBatch(sequenceLength * curBatchSize);
   Eigen::ArrayXf obsIsTwoBatch(sequenceLength * curBatchSize);
@@ -697,55 +698,7 @@ void HMM::decodeBatch(const vector<PairObservations>& obsBatch, const unsigned f
 
   // combine (alpha * beta), normalize and store
   Eigen::Map<Eigen::ArrayXf> scale(obsIsZeroBatch.data(), obsIsZeroBatch.size()); // reuse buffer but rename to be less confusing
-  scale.setZero();
-#ifdef NO_SSE
-  for (long int pos = from; pos < to; pos++) {
-    for (int k = 0; k < states; k++) {
-      for (int v = 0; v < curBatchSize; v++) {
-        long int ind = (pos * states + k) * curBatchSize + v;
-        m_alphaBuffer[ind] *= m_betaBuffer[ind];
-        scale[pos * curBatchSize + v] += m_alphaBuffer[ind];
-      }
-    }
-  }
-  for (long int pos = from; pos < to; pos++) {
-    for (int v = 0; v < curBatchSize; v++) {
-      scale[pos * curBatchSize + v] = 1.0f / scale[pos * curBatchSize + v];
-    }
-  }
-  for (long int pos = from; pos < to; pos++) {
-    for (int k = 0; k < states; k++) {
-      for (int v = 0; v < curBatchSize; v++) {
-        m_alphaBuffer[(pos * states + k) * curBatchSize + v] *= scale[pos * curBatchSize + v];
-      }
-    }
-  }
-#else
-  for (long int pos = from; pos < to; pos++) {
-    for (int k = 0; k < states; k++) {
-      for (int v = 0; v < curBatchSize; v += VECX) {
-        long int ind = (pos * states + k) * curBatchSize + v;
-        FLOAT prod = MULT(LOAD(&m_alphaBuffer[ind]), LOAD(&m_betaBuffer[ind]));
-        STORE(&m_alphaBuffer[ind], prod);
-        STORE(&scale[pos * curBatchSize + v], ADD(LOAD(&scale[pos * curBatchSize + v]), prod));
-      }
-    }
-  }
-  for (long int pos = from; pos < to; pos++) {
-    for (int v = 0; v < curBatchSize; v += VECX) {
-      long int ind = pos * curBatchSize + v;
-      STORE(&scale[ind], RECIPROCAL(LOAD(&scale[ind])));
-    }
-  }
-  for (long int pos = from; pos < to; pos++) {
-    for (int k = 0; k < states; k++) {
-      for (int v = 0; v < curBatchSize; v += VECX) {
-        long int ind = (pos * states + k) * curBatchSize + v;
-        STORE(&m_alphaBuffer[ind], MULT(LOAD(&m_alphaBuffer[ind]), LOAD(&scale[pos * curBatchSize + v])));
-      }
-    }
-  }
-#endif
+  asmc::normalizeAlphaWithBeta(m_alphaBuffer, m_betaBuffer, scale, curBatchSize, states, from, to);
 
   auto t3 = std::chrono::high_resolution_clock::now();
   ticksCombine += t3 - t2;

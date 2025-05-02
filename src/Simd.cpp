@@ -103,6 +103,57 @@ void applyScalingBatch_hwy(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::Arr
   }
 }
 
+void normalizeAlphaWithBeta_hwy(Eigen::Ref<Eigen::ArrayXf> alpha, Eigen::Ref<Eigen::ArrayXf> beta,
+                                Eigen::Ref<Eigen::ArrayXf> scale, int batchSize, int numStates, int from, int to)
+{
+  const hn::ScalableTag<float> d;
+  const int lanes = static_cast<int>(hn::Lanes(d));
+
+  // Zero out scale
+  for (int pos = from; pos < to; ++pos) {
+    for (int v = 0; v < batchSize; v += lanes) {
+      hn::Store(hn::Zero(d), d, &scale(pos * batchSize + v));
+    }
+  }
+
+  // Multiply alpha * beta, store in alpha, accumulate into scale
+  for (int pos = from; pos < to; ++pos) {
+    for (int k = 0; k < numStates; ++k) {
+      for (int v = 0; v < batchSize; v += lanes) {
+        const int ind = (pos * numStates + k) * batchSize + v;
+        auto alpha_vec = hn::Load(d, &alpha(ind));
+        auto beta_vec = hn::Load(d, &beta(ind));
+        auto prod = hn::Mul(alpha_vec, beta_vec);
+        hn::Store(prod, d, &alpha(ind));
+
+        auto scale_vec = hn::Load(d, &scale(pos * batchSize + v));
+        hn::Store(hn::Add(scale_vec, prod), d, &scale(pos * batchSize + v));
+      }
+    }
+  }
+
+  // scale = 1.0 / scale
+  for (int pos = from; pos < to; ++pos) {
+    for (int v = 0; v < batchSize; v += lanes) {
+      const int ind = pos * batchSize + v;
+      auto scale_vec = hn::Load(d, &scale(ind));
+      hn::Store(hn::Div(hn::Set(d, 1.0f), scale_vec), d, &scale(ind));
+    }
+  }
+
+  // alpha *= scale
+  for (int pos = from; pos < to; ++pos) {
+    for (int k = 0; k < numStates; ++k) {
+      for (int v = 0; v < batchSize; v += lanes) {
+        const int ind = (pos * numStates + k) * batchSize + v;
+        auto alpha_vec = hn::Load(d, &alpha(ind));
+        auto scale_vec = hn::Load(d, &scale(pos * batchSize + v));
+        hn::Store(hn::Mul(alpha_vec, scale_vec), d, &alpha(ind));
+      }
+    }
+  }
+}
+
 } // namespace asmc::HWY_NAMESPACE
 
 HWY_AFTER_NAMESPACE();
@@ -118,6 +169,7 @@ HWY_EXPORT(validateBatchSize_hwy);
 HWY_EXPORT(printRuntimeSimdInfo_hwy);
 HWY_EXPORT(calculateScalingBatch_hwy);
 HWY_EXPORT(applyScalingBatch_hwy);
+HWY_EXPORT(normalizeAlphaWithBeta_hwy);
 
 int getNumSimdLanes()
 {
@@ -144,6 +196,12 @@ void applyScalingBatch(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::ArrayXf
                        const int numStates)
 {
   HWY_DYNAMIC_DISPATCH(applyScalingBatch_hwy)(vec, scalings, batchSize, numStates);
+}
+
+void normalizeAlphaWithBeta(Eigen::Ref<Eigen::ArrayXf> alpha, Eigen::Ref<Eigen::ArrayXf> beta,
+                            Eigen::Ref<Eigen::ArrayXf> scale, int batchSize, int numStates, int from, int to)
+{
+  HWY_DYNAMIC_DISPATCH(normalizeAlphaWithBeta_hwy)(alpha, beta, scale, batchSize, numStates, from, to);
 }
 
 } // namespace asmc
