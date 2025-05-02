@@ -16,6 +16,8 @@
 #ifndef ASMC_SIMD
 #define ASMC_SIMD
 
+#include <Eigen/Core>
+
 namespace asmc
 {
 
@@ -39,6 +41,41 @@ void validateBatchSize(int batchSize);
  * and the detected target SIMD instruction set.
  */
 void printRuntimeSimdInfo();
+
+
+/**
+ * Calculate scaling factors for a contiguous array of curBatchSize * numStates floats. The computed scaling factors
+ * are normalized across all states for each item in the batch.
+ *
+ * This method takes three buffers: one with data, one for storing calculated scaling factors, and one for temporarily
+ * storing intermediate sums. It is assumed that all three buffers are appropriately allocated and deallocated outside
+ * this function.
+ *
+ * The sums buffer is set to zeros in this method.
+ *
+ * @param vec an array of length curBatchSize * numStates containing the data
+ * @param scalings an array of length curBatchSize to write calculated scaling factors into
+ * @param sums an array of length curBatchSize for storing intermediate sums
+ * @param batchSize the number of items in the batch
+ * @param numStates the number of states over which to normalize
+ */
+void calculateScalingBatch(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::ArrayXf> scalings,
+                           Eigen::Ref<Eigen::ArrayXf> sums, int batchSize, int numStates);
+
+/**
+ * Apply scaling factors to a contiguous array of curBatchSize * numStates floats. The scale factors are applied per
+ * item to each state, and each state is separated in the data array by a stride length of batchSize.
+ *
+ * This method takes two buffers; one with data that is modified in-place, and one with scale factors that is just read
+ * from.
+ *
+ * @param vec the buffer of length curBatchSize * numStates containing the data
+ * @param scalings an array of length curBatchSize containing the prescribed scale factors
+ * @param batchSize the number of items in the batch
+ * @param numStates the number of states over which to normalize
+ */
+void applyScalingBatch(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::ArrayXf> scalings, int batchSize,
+                       int numStates);
 
 } // namespace asmc
 

@@ -48,9 +48,58 @@ void validateBatchSize_hwy(const int batchSize)
   const size_t lanes = hn::Lanes(d); // Determine the SIMD lane count
 
   // Check if batchSize is divisible by the lane count
-  if (batchSize % lanes != 0) {
-    throw std::runtime_error(
-        fmt::format("Error: the batch size ({}) must be a multiple of the SIMD lane width ({})", batchSize, lanes));
+  if (batchSize <= 0 || batchSize % lanes != 0) {
+    throw std::runtime_error(fmt::format(
+        "Error: the batch size ({}) must be a positive multiple of the SIMD lane width ({})", batchSize, lanes));
+  }
+}
+
+void calculateScalingBatch_hwy(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::ArrayXf> scalings,
+                               Eigen::Ref<Eigen::ArrayXf> sums, const int batchSize, const int numStates)
+{
+  const hn::ScalableTag<float> d;
+  const int lanes = static_cast<int>(hn::Lanes(d));
+
+  const auto zero = hn::Zero(d);
+  for (int i = 0; i < batchSize; i += lanes) {
+    hn::Store(zero, d, &sums(i));
+  }
+
+  for (int stateIdx = 0; stateIdx < numStates; ++stateIdx) {
+    for (int batchItem = 0; batchItem < batchSize; batchItem += lanes) {
+      auto idx = stateIdx * batchSize + batchItem;
+      auto sum_vec = hn::Load(d, &sums(batchItem));
+      auto vec_vec = hn::Load(d, &vec(idx));
+      sum_vec = hn::Add(sum_vec, vec_vec);
+      hn::Store(sum_vec, d, &sums(batchItem));
+    }
+  }
+
+  for (int batchItem = 0; batchItem < batchSize; batchItem += lanes) {
+    auto sum_vec = hn::Load(d, &sums(batchItem));
+    auto one = hn::Set(d, 1.0f);
+    auto scale_vec = hn::Div(one, sum_vec);
+    hn::Store(scale_vec, d, &scalings(batchItem));
+  }
+}
+
+void applyScalingBatch_hwy(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::ArrayXf> scalings, const int batchSize,
+                           const int numStates)
+{
+  const hn::ScalableTag<float> d;
+  const int lanes = static_cast<int>(hn::Lanes(d));
+
+  for (int stateIdx = 0; stateIdx < numStates; ++stateIdx) {
+    for (int batchItem = 0; batchItem < batchSize; batchItem += lanes) {
+      auto vec_ptr = &vec(stateIdx * batchSize + batchItem);
+      auto scale_ptr = &scalings(batchItem);
+
+      auto vec_lanes = hn::Load(d, vec_ptr);
+      auto scale_lanes = hn::Load(d, scale_ptr);
+      auto scaled = hn::Mul(vec_lanes, scale_lanes);
+
+      hn::Store(scaled, d, vec_ptr);
+    }
   }
 }
 
@@ -67,6 +116,8 @@ namespace asmc
 HWY_EXPORT(getNumSimdLanes_hwy);
 HWY_EXPORT(validateBatchSize_hwy);
 HWY_EXPORT(printRuntimeSimdInfo_hwy);
+HWY_EXPORT(calculateScalingBatch_hwy);
+HWY_EXPORT(applyScalingBatch_hwy);
 
 int getNumSimdLanes()
 {
@@ -81,6 +132,18 @@ void printRuntimeSimdInfo()
 void validateBatchSize(int batchSize)
 {
   return HWY_DYNAMIC_DISPATCH(validateBatchSize_hwy)(batchSize);
+}
+
+void calculateScalingBatch(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::ArrayXf> scalings,
+                           Eigen::Ref<Eigen::ArrayXf> sums, int batchSize, int numStates)
+{
+  return HWY_DYNAMIC_DISPATCH(calculateScalingBatch_hwy)(vec, scalings, sums, batchSize, numStates);
+}
+
+void applyScalingBatch(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::ArrayXf> scalings, const int batchSize,
+                       const int numStates)
+{
+  HWY_DYNAMIC_DISPATCH(applyScalingBatch_hwy)(vec, scalings, batchSize, numStates);
 }
 
 } // namespace asmc
