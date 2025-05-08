@@ -220,6 +220,10 @@ FetchContent_MakeAvailable(highway)
 target_link_libraries(ASMC PRIVATE hwy)
 target_compile_definitions(ASMC PRIVATE HWY_DYNAMIC_DISPATCH=1)
 
+if (ASMC_FORCE_PURE)
+    target_compile_definitions(ASMC PRIVATE HWY_COMPILE_ONLY_SCALAR=1)
+endif ()
+
 target_link_libraries(ASMC_data_module PRIVATE Eigen3::Eigen fmt::fmt range-v3 ZLIB::ZLIB)
 
 # Python bindings
