@@ -22,9 +22,9 @@ endif()
 option(ASMC_ENABLE_SIMD_SSE3 "Enable SSE 1, 2 & 3 optimizations" OFF)
 option(ASMC_ENABLE_SIMD_AVX "Enable AVX optimizations" ON)
 option(ASMC_ENABLE_SIMD_AVX512 "Enable AVX512 optimizations" OFF)
-option(ASMC_FORCE_PURE "Force 'pure' instructions" OFF)
+option(ASMC_DISABLE_SIMD "Disable SIMD. Reduces performance; intended only for testing and debugging" OFF)
 
-if(ASMC_FORCE_PURE)
+if(ASMC_DISABLE_SIMD)
   add_definitions(-DNO_SSE)
 
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")

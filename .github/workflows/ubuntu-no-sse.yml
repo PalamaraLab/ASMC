@@ -33,7 +33,7 @@ jobs:
         run: mkdir -p build_dir
 
       - name: cmake configure
-        run: cmake .. -DASMC_FORCE_PURE:BOOL=TRUE
+        run: cmake .. -DASMC_DISABLE_SIMD:BOOL=TRUE
         working-directory: build_dir
 
       - name: cmake build

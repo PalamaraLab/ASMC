@@ -220,8 +220,8 @@ FetchContent_MakeAvailable(highway)
 target_link_libraries(ASMC PRIVATE hwy)
 target_compile_definitions(ASMC PRIVATE HWY_DYNAMIC_DISPATCH=1)
 
-if (ASMC_FORCE_PURE)
-    target_compile_definitions(ASMC PRIVATE HWY_COMPILE_ONLY_SCALAR=1)
+if (ASMC_DISABLE_SIMD)
+    target_compile_definitions(ASMC PRIVATE HWY_COMPILE_ONLY_SCALAR=1 ASMC_SIMD_DISABLED=1)
 endif ()
 
 target_link_libraries(ASMC_data_module PRIVATE Eigen3::Eigen fmt::fmt range-v3 ZLIB::ZLIB)
@@ -262,7 +262,7 @@ if (ASMC_TESTING)
     add_executable(ASMC_regression ${ASMC_regression})
     target_include_directories(ASMC_regression PRIVATE ${ASMC_test_dir})
     target_link_libraries(ASMC_regression PRIVATE ASMC ASMC_data_module)
-    add_test(regression ASMC_regression)
+    add_test(NAME regression COMMAND ASMC_regression)
 endif ()
 
 

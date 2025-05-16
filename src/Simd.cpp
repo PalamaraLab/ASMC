@@ -154,6 +154,22 @@ void normalizeAlphaWithBeta_hwy(Eigen::Ref<Eigen::ArrayXf> alpha, Eigen::Ref<Eig
   }
 }
 
+void updateAlphaColumn_hwy(Eigen::Ref<Eigen::ArrayXf> alphaC, Eigen::Ref<Eigen::ArrayXf> previousAlpha, int batchSize,
+                           int k)
+{
+  const hn::ScalableTag<float> d;
+  const int lanes = static_cast<int>(hn::Lanes(d));
+
+  const int offset_k = k * batchSize;
+  const int offset_kplus = (k + 1) * batchSize;
+
+  for (int v = 0; v < batchSize; v += lanes) {
+    auto next_alpha = hn::Load(d, &alphaC[offset_kplus + v]);
+    auto prev_alpha = hn::Load(d, &previousAlpha[offset_k + v]);
+    hn::Store(hn::Add(next_alpha, prev_alpha), d, &alphaC[offset_k + v]);
+  }
+}
+
 } // namespace asmc::HWY_NAMESPACE
 
 HWY_AFTER_NAMESPACE();
@@ -170,6 +186,7 @@ HWY_EXPORT(printRuntimeSimdInfo_hwy);
 HWY_EXPORT(calculateScalingBatch_hwy);
 HWY_EXPORT(applyScalingBatch_hwy);
 HWY_EXPORT(normalizeAlphaWithBeta_hwy);
+HWY_EXPORT(updateAlphaColumn_hwy);
 
 int getNumSimdLanes()
 {
@@ -202,6 +219,12 @@ void normalizeAlphaWithBeta(Eigen::Ref<Eigen::ArrayXf> alpha, Eigen::Ref<Eigen::
                             Eigen::Ref<Eigen::ArrayXf> scale, int batchSize, int numStates, int from, int to)
 {
   HWY_DYNAMIC_DISPATCH(normalizeAlphaWithBeta_hwy)(alpha, beta, scale, batchSize, numStates, from, to);
+}
+
+void updateAlphaColumn(Eigen::Ref<Eigen::ArrayXf> alphaC, Eigen::Ref<Eigen::ArrayXf> previousAlpha, int batchSize,
+                       int k)
+{
+  HWY_DYNAMIC_DISPATCH(updateAlphaColumn_hwy)(alphaC, previousAlpha, batchSize, k);
 }
 
 } // namespace asmc

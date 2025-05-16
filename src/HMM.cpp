@@ -669,7 +669,6 @@ void HMM::runLastBatch(vector<PairObservations>& obsBatch)
 void HMM::decodeBatch(const vector<PairObservations>& obsBatch, const unsigned from, const unsigned to)
 {
   int curBatchSize = static_cast<int>(obsBatch.size());
-
   asmc::validateBatchSize(curBatchSize);
 
   Eigen::ArrayXf obsIsZeroBatch(sequenceLength * curBatchSize);
@@ -783,17 +782,7 @@ void HMM::getNextAlphaBatched(float recDistFromPrevious, Eigen::Ref<Eigen::Array
          curBatchSize * sizeof(alphaC[0]));
 
   for (int k = states - 2; k >= 0; k--) {
-#ifdef NO_SSE
-    for (int v = 0; v < curBatchSize; v++) {
-      alphaC[k * curBatchSize + v] = alphaC[(k + 1) * curBatchSize + v] + previousAlpha[k * curBatchSize + v];
-    }
-#else
-    for (int v = 0; v < curBatchSize; v += VECX) {
-      FLOAT alphaC_kp1_v = LOAD(&alphaC[(k + 1) * curBatchSize + v]);
-      FLOAT prevAlpha_k_v = LOAD(&previousAlpha[k * curBatchSize + v]);
-      STORE(&alphaC[k * curBatchSize + v], ADD(alphaC_kp1_v, prevAlpha_k_v));
-    }
-#endif
+    asmc::updateAlphaColumn(alphaC, previousAlpha, curBatchSize, k);
   }
 
   AU.setZero();

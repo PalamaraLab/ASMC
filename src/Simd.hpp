@@ -24,7 +24,7 @@ namespace asmc
 /**
  * Gets the number of SIMD float lanes available, detected at runtime.
  *
- * @return an int representing the number of SIMD float lanes availalble
+ * @return an int representing the number of SIMD float lanes available
  */
 int getNumSimdLanes();
 
@@ -78,11 +78,40 @@ void applyScalingBatch(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::ArrayXf
                        int numStates);
 
 /**
- * Scales the alpha buffer by beta, accumulates into scale, normalizes scale,
- * and applies scale to alpha.
+ * Multiply two buffers elementwise (alpha *= beta), accumulate the result across states into a scaling buffer,
+ * normalize the scaling buffer by computing its reciprocal, and apply it to the alpha buffer in-place.
+ *
+ * The alpha and beta buffers are of length batchSize * numStates * sequenceLength (flattened 3D layout). For each
+ * position, the alpha and beta values for all states are multiplied, accumulated into a per-batch scaling factor, and
+ * then alpha is normalized using the inverse of these factors.
+ *
+ * All arrays are accessed with strides of batchSize; alpha and beta are modified in-place, scale is both written and
+ * read.
+ *
+ * @param alpha the buffer to modify in-place (length: batchSize * numStates * sequenceLength)
+ * @param beta the buffer to multiply with alpha (same shape as alpha)
+ * @param scale the scaling buffer (length: batchSize * sequenceLength), written to and used for normalization
+ * @param batchSize the number of items in the batch
+ * @param numStates the number of HMM states
+ * @param from the start position (inclusive) along the sequence dimension
+ * @param to the end position (exclusive) along the sequence dimension
  */
 void normalizeAlphaWithBeta(Eigen::Ref<Eigen::ArrayXf> alpha, Eigen::Ref<Eigen::ArrayXf> beta,
                             Eigen::Ref<Eigen::ArrayXf> scale, int batchSize, int numStates, int from, int to);
+
+/**
+ * Update a column of the alpha buffer by adding the next column and the corresponding values in previousAlpha.
+ *
+ * The data is laid out row-major in a flattened 2D array of shape [numStates, batchSize]. This function updates
+ * the k-th row (in-place) as: alphaC[k] = alphaC[k + 1] + previousAlpha[k].
+ *
+ * @param alphaC buffer of shape [numStates, batchSize] (flattened); modified in-place
+ * @param previousAlpha buffer of same shape; read-only
+ * @param batchSize number of items in a single state (stride size)
+ * @param k index of the state to update
+ */
+void updateAlphaColumn(Eigen::Ref<Eigen::ArrayXf> alphaC, Eigen::Ref<Eigen::ArrayXf> previousAlpha, int batchSize,
+                       int k);
 
 } // namespace asmc
 
