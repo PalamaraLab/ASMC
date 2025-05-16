@@ -25,7 +25,12 @@ TEST_CASE("Print runtime SIMD information", "[SIMD]")
 TEST_CASE("Check batchsize validation", "[SIMD]")
 {
   const int numSimdLanes = asmc::getNumSimdLanes();
+
+#ifdef ASMC_SIMD_DISABLED
+  REQUIRE(numSimdLanes == 1);
+#else
   REQUIRE(numSimdLanes > 1);
+#endif
 
   const int compositeBatchSize = 2 * numSimdLanes;
   const int nonCompositeBatchSize = compositeBatchSize + 1;

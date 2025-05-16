@@ -18,6 +18,8 @@
 
 #include <Eigen/Core>
 
+#include <string>
+
 namespace asmc
 {
 
@@ -42,6 +44,12 @@ void validateBatchSize(int batchSize);
  */
 void printRuntimeSimdInfo();
 
+/**
+ * Warn a user is a specific test may fail due to running it with a different SIMD backend than intended.
+ *
+ * @param expected the SIMD backend (e.g. AVX2) that the test was designed to run with
+ */
+void warnIfSimdMismatch(const std::string& expected);
 
 /**
  * Calculate scaling factors for a contiguous array of curBatchSize * numStates floats. The computed scaling factors

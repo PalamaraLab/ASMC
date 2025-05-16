@@ -16,6 +16,10 @@
 #include "Simd.hpp"
 
 #include <fmt/core.h>
+#include <fmt/ostream.h>
+
+#include <string>
+#include <iostream>
 
 #undef HWY_TARGET_INCLUDE
 #define HWY_TARGET_INCLUDE "Simd.cpp"
@@ -41,7 +45,6 @@ void printRuntimeSimdInfo_hwy()
              hwy::TargetName(HWY_TARGET));
 }
 
-// Implementation of the validation function with batchSize as a parameter
 void validateBatchSize_hwy(const int batchSize)
 {
   const hn::ScalableTag<float> d;
@@ -51,6 +54,19 @@ void validateBatchSize_hwy(const int batchSize)
   if (batchSize <= 0 || batchSize % lanes != 0) {
     throw std::runtime_error(fmt::format(
         "Error: the batch size ({}) must be a positive multiple of the SIMD lane width ({})", batchSize, lanes));
+  }
+}
+
+void warnIfSimdMismatch_hwy(const std::string& expected)
+{
+  const std::string actual = hwy::TargetName(HWY_TARGET);
+
+  if (expected != actual) {
+    fmt::print(std::cerr,
+               "[Warning] SIMD backend mismatch: this test was designed to run with {}, but is running with {}. "
+               "Numerical differences may be possible.\n",
+               expected, actual);
+    std::cerr.flush();
   }
 }
 
@@ -183,6 +199,7 @@ namespace asmc
 HWY_EXPORT(getNumSimdLanes_hwy);
 HWY_EXPORT(validateBatchSize_hwy);
 HWY_EXPORT(printRuntimeSimdInfo_hwy);
+HWY_EXPORT(warnIfSimdMismatch_hwy);
 HWY_EXPORT(calculateScalingBatch_hwy);
 HWY_EXPORT(applyScalingBatch_hwy);
 HWY_EXPORT(normalizeAlphaWithBeta_hwy);
@@ -201,6 +218,11 @@ void printRuntimeSimdInfo()
 void validateBatchSize(int batchSize)
 {
   return HWY_DYNAMIC_DISPATCH(validateBatchSize_hwy)(batchSize);
+}
+
+void warnIfSimdMismatch(const std::string& expected)
+{
+  return HWY_DYNAMIC_DISPATCH(warnIfSimdMismatch_hwy)(expected);
 }
 
 void calculateScalingBatch(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::ArrayXf> scalings,
