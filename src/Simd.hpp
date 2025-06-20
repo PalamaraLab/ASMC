@@ -121,6 +121,37 @@ void normalizeAlphaWithBeta(Eigen::Ref<Eigen::ArrayXf> alpha, Eigen::Ref<Eigen::
 void updateAlphaColumn(Eigen::Ref<Eigen::ArrayXf> alphaC, Eigen::Ref<Eigen::ArrayXf> previousAlpha, int batchSize,
                        int k);
 
+/**
+ * Compute the nextAlpha vector for a given HMM state and position in the sequence.
+ *
+ * This performs a forward update for state `k`, combining previous alpha values,
+ * recurrence terms (AU), emissions, and transition coefficients.
+ *
+ * All input arrays are stored in row-major, flattened [state][batch] layout.
+ *
+ * @param nextAlpha the output alpha buffer (modified in-place)
+ * @param previousAlpha previous alpha values (read-only)
+ * @param alphaC scratch buffer used in updates (read-only)
+ * @param AU scratch recurrence buffer (read/write)
+ * @param B, U, D transition coefficient arrays (length = numStates)
+ * @param columnRatios array of size (numStates - 1), used if k > 0
+ * @param emission1AtSite, emission0minus1AtSite, emission2minus0AtSite emission probability components (length =
+ * numStates)
+ * @param obsIsZeroBatch, obsIsTwoBatch observation indicators at current position (length = batchSize)
+ * @param batchSize number of items in the batch
+ * @param numStates number of HMM states
+ * @param k the current state index
+ * @param pos current sequence position
+ */
+void updateAlphaForwardStep(Eigen::Ref<Eigen::ArrayXf> nextAlpha, Eigen::Ref<Eigen::ArrayXf> previousAlpha,
+                            Eigen::Ref<Eigen::ArrayXf> alphaC, Eigen::Ref<Eigen::ArrayXf> AU, const float* B,
+                            const float* U, const float* D, const std::vector<float>& columnRatios,
+                            const std::vector<float>& emission1AtSite, const std::vector<float>& emission0minus1AtSite,
+                            const std::vector<float>& emission2minus0AtSite, const Eigen::ArrayXf& obsIsZeroBatch,
+                            const Eigen::ArrayXf& obsIsTwoBatch, int batchSize, int numStates, int k, int pos);
+
+
+
 } // namespace asmc
 
 #endif // ASMC_SIMD

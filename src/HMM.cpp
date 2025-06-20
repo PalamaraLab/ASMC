@@ -773,7 +773,6 @@ void HMM::getNextAlphaBatched(float recDistFromPrevious, Eigen::Ref<Eigen::Array
                               const std::vector<float>& emission1AtSite, const std::vector<float>& emission0minus1AtSite,
                               const std::vector<float>& emission2minus0AtSite)
 {
-
   const float* B = &m_decodingQuant.Bvectors.at(recDistFromPrevious)[0];
   const float* U = &m_decodingQuant.Uvectors.at(recDistFromPrevious)[0];
   const float* D = &m_decodingQuant.Dvectors.at(recDistFromPrevious)[0];
@@ -787,66 +786,9 @@ void HMM::getNextAlphaBatched(float recDistFromPrevious, Eigen::Ref<Eigen::Array
 
   AU.setZero();
   for (int k = 0; k < states; k++) {
-
-#ifdef NO_SSE
-    for (int v = 0; v < curBatchSize; v++) {
-      if (k)
-        AU[v] = U[k - 1] * previousAlpha[(k - 1) * curBatchSize + v] + m_decodingQuant.columnRatios[k - 1] * AU[v];
-      float term = AU[v] + D[k] * previousAlpha[k * curBatchSize + v];
-      if (k < states - 1) {
-        term += B[k] * alphaC[(k + 1) * curBatchSize + v];
-      }
-      float currentEmission_k = emission1AtSite[k] + emission0minus1AtSite[k] * obsIsZeroBatch[pos * curBatchSize + v] +
-                                emission2minus0AtSite[k] * obsIsTwoBatch[pos * curBatchSize + v];
-      nextAlpha[k * curBatchSize + v] = currentEmission_k * term;
-    }
-#else
-#ifdef AVX512
-    FLOAT D_k = LOAD1(D[k]);
-    FLOAT B_k = LOAD1(B[k]);
-    FLOAT em1Prob_k = LOAD1(emission1AtSite[k]);
-    FLOAT em0minus1Prob_k = LOAD1(emission0minus1AtSite[k]);
-    FLOAT em2minus0Prob_k = LOAD1(emission2minus0AtSite[k]);
-#else
-    FLOAT D_k = LOAD1(&D[k]);
-    FLOAT B_k = LOAD1(&B[k]);
-    FLOAT em1Prob_k = LOAD1(&emission1AtSite[k]);
-    FLOAT em0minus1Prob_k = LOAD1(&emission0minus1AtSite[k]);
-    FLOAT em2minus0Prob_k = LOAD1(&emission2minus0AtSite[k]);
-#endif
-
-    FLOAT Ukm1, colRatios_km1;
-    if (k) {
-#ifdef AVX512
-      Ukm1 = LOAD1(U[k - 1]);
-      colRatios_km1 = LOAD1(m_decodingQuant.columnRatios[k - 1]);
-#else
-      Ukm1 = LOAD1(&U[k - 1]);
-      colRatios_km1 = LOAD1(&m_decodingQuant.columnRatios[k - 1]);
-#endif
-    }
-    for (int v = 0; v < curBatchSize; v += VECX) {
-      FLOAT AU_v;
-      if (k) {
-        FLOAT term1 = MULT(Ukm1, LOAD(&previousAlpha[(k - 1) * curBatchSize + v]));
-        FLOAT term2 = MULT(colRatios_km1, LOAD(&AU[v]));
-        AU_v = ADD(term1, term2);
-        STORE(&AU[v], AU_v);
-      } else
-        AU_v = LOAD(&AU[v]);
-
-      FLOAT term = ADD(AU_v, MULT(D_k, LOAD(&previousAlpha[k * curBatchSize + v])));
-      if (k < states - 1) { // TODO: just extend B and alphaC?
-        term = ADD(term, MULT(B_k, LOAD(&alphaC[(k + 1) * curBatchSize + v])));
-      }
-      FLOAT currentEmission_k =
-          ADD(ADD(em1Prob_k, MULT(em0minus1Prob_k, LOAD(&obsIsZeroBatch[pos * curBatchSize + v]))),
-              MULT(em2minus0Prob_k, LOAD(&obsIsTwoBatch[pos * curBatchSize + v])));
-      if (v == 0) {
-      }
-      STORE(&nextAlpha[k * curBatchSize + v], MULT(currentEmission_k, term));
-    }
-#endif
+    asmc::updateAlphaForwardStep(nextAlpha, previousAlpha, alphaC, AU, B, U, D, m_decodingQuant.columnRatios,
+                                 emission1AtSite, emission0minus1AtSite, emission2minus0AtSite, obsIsZeroBatch,
+                                 obsIsTwoBatch, curBatchSize, states, k, pos);
   }
 }
 
