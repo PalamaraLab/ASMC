@@ -221,7 +221,7 @@ target_link_libraries(ASMC PRIVATE hwy)
 target_compile_definitions(ASMC PRIVATE HWY_DYNAMIC_DISPATCH=1)
 
 if (ASMC_DISABLE_SIMD)
-    target_compile_definitions(ASMC PRIVATE HWY_COMPILE_ONLY_SCALAR=1 ASMC_SIMD_DISABLED=1)
+    target_compile_definitions(ASMC PUBLIC HWY_COMPILE_ONLY_SCALAR=1 ASMC_SIMD_DISABLED=1)
 endif ()
 
 target_link_libraries(ASMC_data_module PRIVATE Eigen3::Eigen fmt::fmt range-v3 ZLIB::ZLIB)
