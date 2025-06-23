@@ -17,6 +17,7 @@ jobs:
     env:
       CXX: clang++-18
     if: ${{ github.event_name == 'pull_request' || github.repository == 'PalamaraLab/ASMC' }}
+    timeout-minutes: 10
 
     steps:
 

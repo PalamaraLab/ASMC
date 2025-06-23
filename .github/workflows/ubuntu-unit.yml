@@ -15,6 +15,7 @@ jobs:
     name: Unit tests on Ubuntu
     runs-on: ubuntu-24.04
     if:  ${{ github.event_name == 'pull_request' || github.repository == 'PalamaraLab/ASMC' }}
+    timeout-minutes: 10
 
     steps:
 

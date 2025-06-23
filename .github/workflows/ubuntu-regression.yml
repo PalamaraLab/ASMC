@@ -17,6 +17,7 @@ jobs:
     env:
       CXX: g++-14
     if: ${{ github.event_name == 'pull_request' || github.repository == 'PalamaraLab/ASMC' }}
+    timeout-minutes: 10
 
     steps:
       - name: checkout repo & submodules

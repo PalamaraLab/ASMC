@@ -12,6 +12,7 @@ jobs:
     name: Coverage on Ubuntu
     runs-on: ubuntu-24.04
     if: ${{ github.repository == 'PalamaraLab/ASMC' }}
+    timeout-minutes: 10
 
     steps:
 
