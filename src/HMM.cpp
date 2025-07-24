@@ -778,8 +778,8 @@ void HMM::getNextAlphaBatched(float recDistFromPrevious, Eigen::Ref<Eigen::Array
   const float* U = &m_decodingQuant.Uvectors.at(recDistFromPrevious)[0];
   const float* D = &m_decodingQuant.Dvectors.at(recDistFromPrevious)[0];
 
-  memcpy(&alphaC[(states - 1) * curBatchSize], &previousAlpha[(states - 1) * curBatchSize],
-         curBatchSize * sizeof(alphaC[0]));
+  alphaC.segment((states - 1) * curBatchSize, curBatchSize) =
+      previousAlpha.segment((states - 1) * curBatchSize, curBatchSize);
 
   for (int k = states - 2; k >= 0; k--) {
     asmc::updateAlphaColumn(alphaC, previousAlpha, curBatchSize, k);
