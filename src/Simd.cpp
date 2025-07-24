@@ -170,19 +170,21 @@ void normalizeAlphaWithBeta_hwy(Eigen::Ref<Eigen::ArrayXf> alpha, Eigen::Ref<Eig
   }
 }
 
-void updateAlphaColumn_hwy(Eigen::Ref<Eigen::ArrayXf> alphaC, Eigen::Ref<Eigen::ArrayXf> previousAlpha, int batchSize,
-                           int k)
+void updateAlphaColumn_hwy(Eigen::Ref<Eigen::ArrayXf> alphaC, Eigen::Ref<Eigen::ArrayXf> previousAlpha, int batchSize, int numStates)
 {
-  const hn::ScalableTag<float> d;
-  const int lanes = static_cast<int>(hn::Lanes(d));
+  for (int k = numStates - 2; k >= 0; k--) {
 
-  const int offset_k = k * batchSize;
-  const int offset_kplus = (k + 1) * batchSize;
+    const hn::ScalableTag<float> d;
+    const int lanes = static_cast<int>(hn::Lanes(d));
 
-  for (int v = 0; v < batchSize; v += lanes) {
-    auto next_alpha = hn::Load(d, &alphaC[offset_kplus + v]);
-    auto prev_alpha = hn::Load(d, &previousAlpha[offset_k + v]);
-    hn::Store(hn::Add(next_alpha, prev_alpha), d, &alphaC[offset_k + v]);
+    const int offset_k = k * batchSize;
+    const int offset_kplus = (k + 1) * batchSize;
+
+    for (int v = 0; v < batchSize; v += lanes) {
+      auto next_alpha = hn::Load(d, &alphaC[offset_kplus + v]);
+      auto prev_alpha = hn::Load(d, &previousAlpha[offset_k + v]);
+      hn::Store(hn::Add(next_alpha, prev_alpha), d, &alphaC[offset_k + v]);
+    }
   }
 }
 
@@ -190,52 +192,55 @@ void updateAlphaForwardStep_hwy(Eigen::Ref<Eigen::ArrayXf> nextAlpha, Eigen::Ref
                             Eigen::Ref<Eigen::ArrayXf> alphaC, Eigen::Ref<Eigen::ArrayXf> AU, const float* B,
                             const float* U, const float* D, const std::vector<float>& columnRatios,
                             const std::vector<float>& emission1AtSite, const std::vector<float>& emission0minus1AtSite,
-                            const std::vector<float>& emission2minus0AtSite, const Eigen::ArrayXf& obsIsZeroBatch,
-                            const Eigen::ArrayXf& obsIsTwoBatch, int batchSize, int numStates, int k, int pos)
+                            const std::vector<float>& emission2minus0AtSite, Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch,
+                            Eigen::Ref<Eigen::ArrayXf> obsIsTwoBatch, int batchSize, int numStates, int pos)
 {
   const hn::ScalableTag<float> d;
   const int lanes = static_cast<int>(hn::Lanes(d));
 
-  const int offset_k = k * batchSize;
-  const int offset_kplus1 = (k + 1) * batchSize;
-  const int offset_kminus1 = (k - 1) * batchSize;
-  const int obs_offset = pos * batchSize;
+  for (int k = 0; k < numStates; k++) {
+    const int offset_k = k * batchSize;
+    const int offset_kplus1 = (k + 1) * batchSize;
+    const int offset_kminus1 = (k - 1) * batchSize;
+    const int obs_offset = pos * batchSize;
 
-  const auto D_k = hn::Set(d, D[k]);
-  const auto B_k = (k < numStates - 1) ? hn::Set(d, B[k]) : hn::Zero(d);
-  const auto em1 = hn::Set(d, emission1AtSite[k]);
-  const auto em0m1 = hn::Set(d, emission0minus1AtSite[k]);
-  const auto em2m0 = hn::Set(d, emission2minus0AtSite[k]);
+    const auto D_k = hn::Set(d, D[k]);
+    const auto B_k = (k < numStates - 1) ? hn::Set(d, B[k]) : hn::Zero(d);
+    const auto em1 = hn::Set(d, emission1AtSite[k]);
+    const auto em0m1 = hn::Set(d, emission0minus1AtSite[k]);
+    const auto em2m0 = hn::Set(d, emission2minus0AtSite[k]);
 
-  auto U_km1 = k > 0 ? hn::Set(d, U[k - 1]) : hn::Zero(d);
-  auto col_km1 = k > 0 ? hn::Set(d, columnRatios[k - 1]) : hn::Zero(d);
+    auto U_km1 = k > 0 ? hn::Set(d, U[k - 1]) : hn::Zero(d);
+    auto col_km1 = k > 0 ? hn::Set(d, columnRatios[k - 1]) : hn::Zero(d);
 
-  for (int v = 0; v < batchSize; v += lanes) {
-    auto AU_v = hn::Load(d, &AU[v]);
+    for (int v = 0; v < batchSize; v += lanes) {
 
-    if (k > 0) {
-      auto prev_km1 = hn::Load(d, &previousAlpha[offset_kminus1 + v]);
-      auto term1 = hn::Mul(U_km1, prev_km1);
-      auto term2 = hn::Mul(col_km1, AU_v);
-      AU_v = hn::Add(term1, term2);
-      hn::Store(AU_v, d, &AU[v]);
+      auto AU_v = hn::Load(d, &AU[v]);
+
+      if (k > 0) {
+        auto prev_km1 = hn::Load(d, &previousAlpha[offset_kminus1 + v]);
+        auto term1 = hn::Mul(U_km1, prev_km1);
+        auto term2 = hn::Mul(col_km1, AU_v);
+        AU_v = hn::Add(term1, term2);
+        hn::Store(AU_v, d, &AU[v]);
+      }
+
+      auto prev_k = hn::Load(d, &previousAlpha[offset_k + v]);
+      auto term = hn::Add(AU_v, hn::Mul(D_k, prev_k));
+
+      if (k < numStates - 1) {
+        auto ac_kplus1 = hn::Load(d, &alphaC[offset_kplus1 + v]);
+        term = hn::Add(term, hn::Mul(B_k, ac_kplus1));
+      }
+
+      auto obs0 = hn::Load(d, &obsIsZeroBatch[obs_offset + v]);
+      auto obs2 = hn::Load(d, &obsIsTwoBatch[obs_offset + v]);
+
+      auto emission_term = hn::Add(em1, hn::Mul(em0m1, obs0));
+      emission_term = hn::Add(emission_term, hn::Mul(em2m0, obs2));
+
+      hn::Store(hn::Mul(emission_term, term), d, &nextAlpha[offset_k + v]);
     }
-
-    auto prev_k = hn::Load(d, &previousAlpha[offset_k + v]);
-    auto term = hn::Add(AU_v, hn::Mul(D_k, prev_k));
-
-    if (k < numStates - 1) {
-      auto ac_kplus1 = hn::Load(d, &alphaC[offset_kplus1 + v]);
-      term = hn::Add(term, hn::Mul(B_k, ac_kplus1));
-    }
-
-    auto obs0 = hn::Load(d, &obsIsZeroBatch[obs_offset + v]);
-    auto obs2 = hn::Load(d, &obsIsTwoBatch[obs_offset + v]);
-
-    auto emission_term = hn::Add(em1, hn::Mul(em0m1, obs0));
-    emission_term = hn::Add(emission_term, hn::Mul(em2m0, obs2));
-
-    hn::Store(hn::Mul(emission_term, term), d, &nextAlpha[offset_k + v]);
   }
 }
 
@@ -298,22 +303,21 @@ void normalizeAlphaWithBeta(Eigen::Ref<Eigen::ArrayXf> alpha, Eigen::Ref<Eigen::
   HWY_DYNAMIC_DISPATCH(normalizeAlphaWithBeta_hwy)(alpha, beta, scale, batchSize, numStates, from, to);
 }
 
-void updateAlphaColumn(Eigen::Ref<Eigen::ArrayXf> alphaC, Eigen::Ref<Eigen::ArrayXf> previousAlpha, int batchSize,
-                       int k)
+void updateAlphaColumn(Eigen::Ref<Eigen::ArrayXf> alphaC, Eigen::Ref<Eigen::ArrayXf> previousAlpha, int batchSize, int numStates)
 {
-  HWY_DYNAMIC_DISPATCH(updateAlphaColumn_hwy)(alphaC, previousAlpha, batchSize, k);
+  HWY_DYNAMIC_DISPATCH(updateAlphaColumn_hwy)(alphaC, previousAlpha, batchSize, numStates);
 }
 
 void updateAlphaForwardStep(Eigen::Ref<Eigen::ArrayXf> nextAlpha, Eigen::Ref<Eigen::ArrayXf> previousAlpha,
                             Eigen::Ref<Eigen::ArrayXf> alphaC, Eigen::Ref<Eigen::ArrayXf> AU, const float* B,
                             const float* U, const float* D, const std::vector<float>& columnRatios,
                             const std::vector<float>& emission1AtSite, const std::vector<float>& emission0minus1AtSite,
-                            const std::vector<float>& emission2minus0AtSite, const Eigen::ArrayXf& obsIsZeroBatch,
-                            const Eigen::ArrayXf& obsIsTwoBatch, int batchSize, int numStates, int k, int pos)
+                            const std::vector<float>& emission2minus0AtSite, Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch,
+                            Eigen::Ref<Eigen::ArrayXf> obsIsTwoBatch, int batchSize, int numStates, int pos)
 {
   HWY_DYNAMIC_DISPATCH(updateAlphaForwardStep_hwy)
   (nextAlpha, previousAlpha, alphaC, AU, B, U, D, columnRatios, emission1AtSite, emission0minus1AtSite,
-   emission2minus0AtSite, obsIsZeroBatch, obsIsTwoBatch, batchSize, numStates, k, pos);
+   emission2minus0AtSite, obsIsZeroBatch, obsIsTwoBatch, batchSize, numStates, pos);
 }
 
 } // namespace asmc

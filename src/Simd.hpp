@@ -116,10 +116,9 @@ void normalizeAlphaWithBeta(Eigen::Ref<Eigen::ArrayXf> alpha, Eigen::Ref<Eigen::
  * @param alphaC buffer of shape [numStates, batchSize] (flattened); modified in-place
  * @param previousAlpha buffer of same shape; read-only
  * @param batchSize number of items in a single state (stride size)
- * @param k index of the state to update
+ * @param numStates number of states
  */
-void updateAlphaColumn(Eigen::Ref<Eigen::ArrayXf> alphaC, Eigen::Ref<Eigen::ArrayXf> previousAlpha, int batchSize,
-                       int k);
+void updateAlphaColumn(Eigen::Ref<Eigen::ArrayXf> alphaC, Eigen::Ref<Eigen::ArrayXf> previousAlpha, int batchSize, int numStates);
 
 /**
  * Compute the nextAlpha vector for a given HMM state and position in the sequence.
@@ -140,15 +139,14 @@ void updateAlphaColumn(Eigen::Ref<Eigen::ArrayXf> alphaC, Eigen::Ref<Eigen::Arra
  * @param obsIsZeroBatch, obsIsTwoBatch observation indicators at current position (length = batchSize)
  * @param batchSize number of items in the batch
  * @param numStates number of HMM states
- * @param k the current state index
  * @param pos current sequence position
  */
 void updateAlphaForwardStep(Eigen::Ref<Eigen::ArrayXf> nextAlpha, Eigen::Ref<Eigen::ArrayXf> previousAlpha,
                             Eigen::Ref<Eigen::ArrayXf> alphaC, Eigen::Ref<Eigen::ArrayXf> AU, const float* B,
                             const float* U, const float* D, const std::vector<float>& columnRatios,
                             const std::vector<float>& emission1AtSite, const std::vector<float>& emission0minus1AtSite,
-                            const std::vector<float>& emission2minus0AtSite, const Eigen::ArrayXf& obsIsZeroBatch,
-                            const Eigen::ArrayXf& obsIsTwoBatch, int batchSize, int numStates, int k, int pos);
+                            const std::vector<float>& emission2minus0AtSite, Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch,
+                            Eigen::Ref<Eigen::ArrayXf> obsIsTwoBatch, int batchSize, int numStates, int pos);
 
 
 
