@@ -40,8 +40,6 @@ if(CMAKE_BUILD_TYPE MATCHES "Deb")
     endif ()
 endif()
 
-# Set SIMD compiler options
-include(cmake/SIMD.cmake)
 
 set(ASMC_exe_dir ${CMAKE_CURRENT_SOURCE_DIR}/exe)
 set(ASMC_source_dir ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -96,7 +94,6 @@ set(ASMC_source
         )
 
 set(ASMC_headers
-        ${ASMC_source_dir}/AvxDefinitions.hpp
         ${ASMC_source_dir}/BinaryDataReader.hpp
         ${ASMC_source_dir}/HMM.hpp
         ${ASMC_source_dir}/HmmUtils.hpp
@@ -187,6 +184,9 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(eigen)
 target_link_libraries(ASMC PUBLIC Eigen3::Eigen)
+
+# Ensure Eigen aligns memory for SIMD (up to 64 bytes for AVX512)
+add_compile_definitions(EIGEN_MAX_ALIGN_BYTES=64)
 
 # Fetch fmt
 set(FMT_TEST OFF CACHE BOOL "Disable fmt tests")
@@ -308,3 +308,13 @@ if (ASMC_ENABLE_COVERAGE)
         message(FATAL_ERROR "GCC or Clang required with ASMC_ENABLE_COVERAGE: found ${CMAKE_CXX_COMPILER_ID}")
     endif ()
 endif ()
+
+option(ASMC_ENABLE_FAST_MATH "Enable fast math optimizations" OFF)
+if(ASMC_ENABLE_FAST_MATH)
+    message(STATUS "Build with fast math optimizations")
+
+    if((CMAKE_CXX_COMPILER_ID MATCHES "Clang") OR (CMAKE_CXX_COMPILER_ID MATCHES "GNU"))
+        add_compile_options(-ffast-math)
+    endif ()
+
+endif()
