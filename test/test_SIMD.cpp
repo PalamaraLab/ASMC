@@ -36,5 +36,8 @@ TEST_CASE("Check batchsize validation", "[SIMD]")
   const int nonCompositeBatchSize = compositeBatchSize + 1;
 
   REQUIRE_NOTHROW(asmc::validateBatchSize(compositeBatchSize));
-  REQUIRE_THROWS_AS(asmc::validateBatchSize(nonCompositeBatchSize), std::runtime_error);
+
+  if (numSimdLanes > 1) {
+    REQUIRE_THROWS_AS(asmc::validateBatchSize(nonCompositeBatchSize), std::runtime_error);
+  }
 }

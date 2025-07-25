@@ -29,7 +29,6 @@
 
 #include <fmt/format.h>
 
-#include "AvxDefinitions.hpp"
 #include "HmmUtils.hpp"
 #include "MemoryUtils.hpp"
 #include "Simd.hpp"
@@ -74,7 +73,8 @@ HMM::HMM(Data _data, const DecodingParams& _decodingParams, int _scalingSkip)
     exit(1);
   }
 
-  cout << "Will decode using " << MODE << " instruction set.\n\n";
+  asmc::printRuntimeSimdInfo();
+
   outFileRoot = decodingParams.outFileRoot;
   expectedCoalTimesFile = decodingParams.expectedCoalTimesFile;
   sequenceLength = data.sites;
@@ -643,8 +643,8 @@ void HMM::runLastBatch(vector<PairObservations>& obsBatch)
     }
   }
 
-  // fill to size divisible by VECX
-  while (obsBatch.size() % VECX != 0) {
+  // fill to size divisible by number of SIMD lanes
+  while (obsBatch.size() % asmc::getNumSimdLanes() != 0) {
     obsBatch.push_back(obsBatch.back());
   }
 
@@ -708,7 +708,7 @@ void HMM::forwardBatch(Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch, Eigen::Ref<Eig
                        int curBatchSize, const unsigned from, const unsigned to)
 {
 
-  assert(curBatchSize % VECX == 0);
+  assert(curBatchSize % asmc::getNumSimdLanes() == 0);
 
   Eigen::ArrayXf alphaC(states * curBatchSize);
   Eigen::ArrayXf AU(curBatchSize);
@@ -864,92 +864,17 @@ void HMM::getPreviousBetaBatched(float recDistFromPrevious, int curBatchSize, Ei
   const vector<float>& U = m_decodingQuant.Uvectors.at(recDistFromPrevious);
   const vector<float>& RR = m_decodingQuant.rowRatioVectors.at(recDistFromPrevious);
   const vector<float>& D = m_decodingQuant.Dvectors.at(recDistFromPrevious);
-#ifdef NO_SSE
 
-  for (int k = 0; k < states; k++) {
-    for (int v = 0; v < curBatchSize; v++) {
-      float currentEmission_k = emission1AtSite[k] +
-                                emission0minus1AtSite[k] * obsIsZeroBatch[(pos + 1) * curBatchSize + v] +
-                                emission2minus0AtSite[k] * obsIsTwoBatch[(pos + 1) * curBatchSize + v];
-      vec[k * curBatchSize + v] = lastComputedBeta[k * curBatchSize + v] * currentEmission_k;
-    }
-  }
-
-#else
-  for (int k = 0; k < states; k++) {
-#ifdef AVX512
-    FLOAT em1Prob_k = LOAD1(emission1AtSite[k]);
-    FLOAT em0minus1Prob_k = LOAD1(emission0minus1AtSite[k]);
-    FLOAT em2minus0Prob_k = LOAD1(emission2minus0AtSite[k]);
-#else
-    FLOAT em1Prob_k = LOAD1(&emission1AtSite[k]);
-    FLOAT em0minus1Prob_k = LOAD1(&emission0minus1AtSite[k]);
-    FLOAT em2minus0Prob_k = LOAD1(&emission2minus0AtSite[k]);
-#endif
-    for (int v = 0; v < curBatchSize; v += VECX) {
-      FLOAT currentEmission_k =
-          ADD(ADD(em1Prob_k, MULT(em0minus1Prob_k, LOAD(&obsIsZeroBatch[(pos + 1) * curBatchSize + v]))),
-              MULT(em2minus0Prob_k, LOAD(&obsIsTwoBatch[(pos + 1) * curBatchSize + v])));
-      STORE(&vec[k * curBatchSize + v], MULT(LOAD(&lastComputedBeta[k * curBatchSize + v]), currentEmission_k));
-    }
-  }
-#endif
+  asmc::computeBetaEmissionProduct(vec, lastComputedBeta, obsIsZeroBatch, obsIsTwoBatch, emission1AtSite,
+                                   emission0minus1AtSite, emission2minus0AtSite, curBatchSize, states, pos);
 
   BU.setZero();
-#ifdef NO_SSE
-  for (int k = states - 2; k >= 0; k--)
-    for (int v = 0; v < curBatchSize; v++)
-      BU[k * curBatchSize + v] = U[k] * vec[(k + 1) * curBatchSize + v] + RR[k] * BU[(k + 1) * curBatchSize + v];
-#else
-  for (int k = states - 2; k >= 0; k--) {
-#ifdef AVX512
-    FLOAT U_k = LOAD1(U[k]);
-    FLOAT RR_k = LOAD1(RR[k]);
-#else
-    FLOAT U_k = LOAD1(&U[k]);
-    FLOAT RR_k = LOAD1(&RR[k]);
-#endif
-    for (int v = 0; v < curBatchSize; v += VECX) {
-      FLOAT term1 = MULT(U_k, LOAD(&vec[(k + 1) * curBatchSize + v]));
-      FLOAT term2 = MULT(RR_k, LOAD(&BU[(k + 1) * curBatchSize + v]));
-      STORE(&BU[k * curBatchSize + v], ADD(term1, term2));
-    }
-  }
-#endif
+
+  asmc::computeBetaUpwardSweep(BU, vec, U, RR, curBatchSize, states);
 
   BL.setZero();
-#ifdef NO_SSE
-  for (int k = 0; k < states; k++) {
-    for (int v = 0; v < curBatchSize; v++) {
-      if (k)
-        BL[v] += B[k - 1] * vec[(k - 1) * curBatchSize + v];
-      currentBeta[k * curBatchSize + v] = BL[v] + D[k] * vec[k * curBatchSize + v] + BU[k * curBatchSize + v];
-    }
-  }
-#else
-  for (int k = 0; k < states; k++) {
-#ifdef AVX512
-    FLOAT D_k = LOAD1(D[k]);
-    FLOAT B_km1;
-    if (k)
-      B_km1 = LOAD1(B[k - 1]);
-#else
-    FLOAT D_k = LOAD1(&D[k]);
-    FLOAT B_km1;
-    if (k)
-      B_km1 = LOAD1(&B[k - 1]);
-#endif
-    for (int v = 0; v < curBatchSize; v += VECX) {
-      FLOAT BL_v = LOAD(&BL[v]);
-      if (k) {
-        BL_v = ADD(BL_v, MULT(B_km1, LOAD(&vec[(k - 1) * curBatchSize + v])));
-        STORE(&BL[v], BL_v);
-      }
-      STORE(&currentBeta[k * curBatchSize + v],
-            ADD(BL_v, ADD(MULT(D_k, LOAD(&vec[k * curBatchSize + v])), LOAD(&BU[k * curBatchSize + v]))));
-    }
-  }
-#endif
+
+  asmc::computeBetaFinalCombine(currentBeta, BL, BU, vec, B, D, curBatchSize, states);
 }
 
 // --posteriorSums

@@ -43,6 +43,7 @@ void printRuntimeSimdInfo_hwy()
 {
   fmt::print("Detected {} float lanes and targeting {}\n", hn::Lanes(hn::ScalableTag<float>()),
              hwy::TargetName(HWY_TARGET));
+  fflush(stdout);
 }
 
 void validateBatchSize_hwy(const int batchSize)
@@ -244,6 +245,104 @@ void updateAlphaForwardStep_hwy(Eigen::Ref<Eigen::ArrayXf> nextAlpha, Eigen::Ref
   }
 }
 
+void computeBetaEmissionProduct_hwy(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::ArrayXf> lastComputedBeta,
+                                    Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch, Eigen::Ref<Eigen::ArrayXf> obsIsTwoBatch,
+                                    const std::vector<float>& emission1AtSite,
+                                    const std::vector<float>& emission0minus1AtSite,
+                                    const std::vector<float>& emission2minus0AtSite, int batchSize, int numStates,
+                                    int pos)
+{
+  namespace hn = hwy::HWY_NAMESPACE;
+  const hn::ScalableTag<float> d;
+  const int lanes = hn::Lanes(d);
+  const int obsOffset = (pos + 1) * batchSize;
+
+  for (int k = 0; k < numStates; ++k) {
+    const auto em1 = hn::Set(d, emission1AtSite[k]);
+    const auto em0m1 = hn::Set(d, emission0minus1AtSite[k]);
+    const auto em2m0 = hn::Set(d, emission2minus0AtSite[k]);
+
+    const int offset = k * batchSize;
+
+    for (int v = 0; v < batchSize; v += lanes) {
+      auto obs0 = hn::Load(d, &obsIsZeroBatch[obsOffset + v]);
+      auto obs2 = hn::Load(d, &obsIsTwoBatch[obsOffset + v]);
+
+      auto emission_k = hn::Add(em1, hn::Mul(em0m1, obs0));
+      emission_k = hn::Add(emission_k, hn::Mul(em2m0, obs2));
+
+      auto beta = hn::Load(d, &lastComputedBeta[offset + v]);
+      auto product = hn::Mul(emission_k, beta);
+
+      hn::Store(product, d, &vec[offset + v]);
+    }
+  }
+}
+
+void computeBetaUpwardSweep_hwy(Eigen::Ref<Eigen::ArrayXf> BU, Eigen::Ref<Eigen::ArrayXf> vec,
+                                const std::vector<float>& U, const std::vector<float>& RR, int batchSize, int numStates)
+{
+  namespace hn = hwy::HWY_NAMESPACE;
+  const hn::ScalableTag<float> d;
+  const int lanes = hn::Lanes(d);
+
+  for (int k = numStates - 2; k >= 0; --k) {
+    const auto U_k = hn::Set(d, U[k]);
+    const auto RR_k = hn::Set(d, RR[k]);
+
+    const int offset_k = k * batchSize;
+    const int offset_kplus1 = (k + 1) * batchSize;
+
+    for (int v = 0; v < batchSize; v += lanes) {
+      const auto vec_next = hn::Load(d, &vec[offset_kplus1 + v]);
+      const auto bu_next = hn::Load(d, &BU[offset_kplus1 + v]);
+
+      const auto term1 = hn::Mul(U_k, vec_next);
+      const auto term2 = hn::Mul(RR_k, bu_next);
+
+      hn::Store(hn::Add(term1, term2), d, &BU[offset_k + v]);
+    }
+  }
+}
+
+void computeBetaFinalCombine_hwy(Eigen::Ref<Eigen::ArrayXf> currentBeta, Eigen::Ref<Eigen::ArrayXf> BL,
+                                 Eigen::Ref<Eigen::ArrayXf> BU, Eigen::Ref<Eigen::ArrayXf> vec,
+                                 const std::vector<float>& B, const std::vector<float>& D, int batchSize, int numStates)
+{
+  namespace hn = hwy::HWY_NAMESPACE;
+  const hn::ScalableTag<float> d;
+  const int lanes = hn::Lanes(d);
+
+  for (int k = 0; k < numStates; ++k) {
+    const auto D_k = hn::Set(d, D[k]);
+    hn::Vec<decltype(d)> B_km1;
+
+    if (k > 0) {
+      B_km1 = hn::Set(d, B[k - 1]);
+    }
+
+    const int offset_k = k * batchSize;
+    const int offset_kminus1 = (k - 1) * batchSize;
+
+    for (int v = 0; v < batchSize; v += lanes) {
+      auto BL_v = hn::Load(d, &BL[v]);
+
+      if (k > 0) {
+        auto vec_km1 = hn::Load(d, &vec[offset_kminus1 + v]);
+        BL_v = hn::Add(BL_v, hn::Mul(B_km1, vec_km1));
+        hn::Store(BL_v, d, &BL[v]);
+      }
+
+      const auto vec_k = hn::Load(d, &vec[offset_k + v]);
+      const auto BU_k = hn::Load(d, &BU[offset_k + v]);
+      const auto D_term = hn::Mul(D_k, vec_k);
+
+      auto total = hn::Add(BL_v, hn::Add(D_term, BU_k));
+      hn::Store(total, d, &currentBeta[offset_k + v]);
+    }
+  }
+}
+
 
 } // namespace asmc::HWY_NAMESPACE
 
@@ -264,6 +363,9 @@ HWY_EXPORT(applyScalingBatch_hwy);
 HWY_EXPORT(normalizeAlphaWithBeta_hwy);
 HWY_EXPORT(updateAlphaColumn_hwy);
 HWY_EXPORT(updateAlphaForwardStep_hwy);
+HWY_EXPORT(computeBetaEmissionProduct_hwy);
+HWY_EXPORT(computeBetaUpwardSweep_hwy);
+HWY_EXPORT(computeBetaFinalCombine_hwy);
 
 int getNumSimdLanes()
 {
@@ -318,6 +420,30 @@ void updateAlphaForwardStep(Eigen::Ref<Eigen::ArrayXf> nextAlpha, Eigen::Ref<Eig
   HWY_DYNAMIC_DISPATCH(updateAlphaForwardStep_hwy)
   (nextAlpha, previousAlpha, alphaC, AU, B, U, D, columnRatios, emission1AtSite, emission0minus1AtSite,
    emission2minus0AtSite, obsIsZeroBatch, obsIsTwoBatch, batchSize, numStates, pos);
+}
+
+void computeBetaEmissionProduct(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::ArrayXf> lastComputedBeta,
+                                Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch, Eigen::Ref<Eigen::ArrayXf> obsIsTwoBatch,
+                                const std::vector<float>& emission1AtSite,
+                                const std::vector<float>& emission0minus1AtSite,
+                                const std::vector<float>& emission2minus0AtSite, int batchSize, int numStates, int pos)
+{
+  HWY_DYNAMIC_DISPATCH(computeBetaEmissionProduct_hwy)
+  (vec, lastComputedBeta, obsIsZeroBatch, obsIsTwoBatch, emission1AtSite, emission0minus1AtSite, emission2minus0AtSite,
+   batchSize, numStates, pos);
+}
+
+void computeBetaUpwardSweep(Eigen::Ref<Eigen::ArrayXf> BU, Eigen::Ref<Eigen::ArrayXf> vec, const std::vector<float>& U,
+                            const std::vector<float>& RR, int batchSize, int numStates)
+{
+  HWY_DYNAMIC_DISPATCH(computeBetaUpwardSweep_hwy)(BU, vec, U, RR, batchSize, numStates);
+}
+
+void computeBetaFinalCombine(Eigen::Ref<Eigen::ArrayXf> currentBeta, Eigen::Ref<Eigen::ArrayXf> BL,
+                             Eigen::Ref<Eigen::ArrayXf> BU, Eigen::Ref<Eigen::ArrayXf> vec, const std::vector<float>& B,
+                             const std::vector<float>& D, int batchSize, int numStates)
+{
+  HWY_DYNAMIC_DISPATCH(computeBetaFinalCombine_hwy)(currentBeta, BL, BU, vec, B, D, batchSize, numStates);
 }
 
 } // namespace asmc

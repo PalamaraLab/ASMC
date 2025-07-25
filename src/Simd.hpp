@@ -148,6 +148,56 @@ void updateAlphaForwardStep(Eigen::Ref<Eigen::ArrayXf> nextAlpha, Eigen::Ref<Eig
                             const std::vector<float>& emission2minus0AtSite, Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch,
                             Eigen::Ref<Eigen::ArrayXf> obsIsTwoBatch, int batchSize, int numStates, int pos);
 
+/**
+ * @brief Computes the element-wise product of lastComputedBeta and per-state emission probabilities,
+ *        storing the result in `vec`. This is the first step of the backward pass (beta recursion) in HMMs.
+ *
+ * @param vec Output buffer of shape (numStates × batchSize), receives the product values.
+ * @param lastComputedBeta Beta values from the next position (same shape as vec).
+ * @param obsIsZeroBatch Binary indicator array for observed symbol '0' at each batch position.
+ * @param obsIsTwoBatch Binary indicator array for observed symbol '2' at each batch position.
+ * @param emission1AtSite Emission base probability for each state.
+ * @param emission0minus1AtSite Modifier for symbol '0' relative to base emission.
+ * @param emission2minus0AtSite Modifier for symbol '2' relative to base emission.
+ * @param batchSize Number of elements in each vectorized batch.
+ * @param numStates Total number of HMM states.
+ * @param pos Position in the sequence (used to compute offset into obs batches).
+ */
+void computeBetaEmissionProduct(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::ArrayXf> lastComputedBeta,
+                                Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch, Eigen::Ref<Eigen::ArrayXf> obsIsTwoBatch,
+                                const std::vector<float>& emission1AtSite,
+                                const std::vector<float>& emission0minus1AtSite,
+                                const std::vector<float>& emission2minus0AtSite, int batchSize, int numStates, int pos);
+
+/**
+ * @brief Computes the upward recursion step for the beta pass (BU), propagating from state k+1 to k.
+ *
+ * @param BU Output buffer of shape (numStates × batchSize), updated in-place.
+ * @param vec Intermediate buffer from emission × beta (same shape as BU).
+ * @param U Vector of upward transition coefficients, one per state.
+ * @param RR Vector of row ratio coefficients, one per state.
+ * @param batchSize Number of elements in each batch.
+ * @param numStates Total number of HMM states.
+ */
+void computeBetaUpwardSweep(Eigen::Ref<Eigen::ArrayXf> BU, Eigen::Ref<Eigen::ArrayXf> vec, const std::vector<float>& U,
+                            const std::vector<float>& RR, int batchSize, int numStates);
+
+/**
+ * @brief Computes the final beta vector from the upward and lateral components (BU and BL),
+ *        and emission-weighted values in `vec`. Updates `BL` in-place and writes final result to `currentBeta`.
+ *
+ * @param currentBeta Output buffer of shape (numStates × batchSize).
+ * @param BL Accumulating lateral beta term, of size batchSize. Updated in-place.
+ * @param BU Upward beta term from previous step, same shape as currentBeta.
+ * @param vec Emission-weighted beta values, same shape as currentBeta.
+ * @param B Transition coefficient vector, indexed by k-1.
+ * @param D Diagonal transition coefficient vector.
+ * @param batchSize Number of batch entries.
+ * @param numStates Total number of HMM states.
+ */
+void computeBetaFinalCombine(Eigen::Ref<Eigen::ArrayXf> currentBeta, Eigen::Ref<Eigen::ArrayXf> BL,
+                             Eigen::Ref<Eigen::ArrayXf> BU, Eigen::Ref<Eigen::ArrayXf> vec, const std::vector<float>& B,
+                             const std::vector<float>& D, int batchSize, int numStates);
 
 
 } // namespace asmc
