@@ -1,6 +1,6 @@
 [![Unit tests: Ubuntu](https://github.com/PalamaraLab/ASMC/actions/workflows/ubuntu-unit.yml/badge.svg)](https://github.com/PalamaraLab/ASMC/actions/workflows/ubuntu-unit.yml)
 [![Unit tests: macOS](https://github.com/PalamaraLab/ASMC/actions/workflows/macos-unit.yml/badge.svg)](https://github.com/PalamaraLab/ASMC/actions/workflows/macos-unit.yml)
-[![Python 3.8 3.11](https://github.com/PalamaraLab/ASMC/actions/workflows/ubuntu-python.yml/badge.svg)](https://github.com/PalamaraLab/ASMC/actions/workflows/ubuntu-python.yml)
+[![Python](https://github.com/PalamaraLab/ASMC/actions/workflows/ubuntu-python.yml/badge.svg)](https://github.com/PalamaraLab/ASMC/actions/workflows/ubuntu-python.yml)
 [![Regression test](https://github.com/PalamaraLab/ASMC/workflows/Regression%20test/badge.svg)](https://github.com/PalamaraLab/ASMC/actions)
 [![Ubuntu asan](https://github.com/PalamaraLab/ASMC/workflows/Ubuntu%20asan/badge.svg)](https://github.com/PalamaraLab/ASMC/actions)
 [![Ubuntu no sse/avx](https://github.com/PalamaraLab/ASMC/workflows/Ubuntu%20no%20sse/avx/badge.svg)](https://github.com/PalamaraLab/ASMC/actions)
@@ -26,14 +26,14 @@ The C++ libraries and executables require:
 - A C++ compiler (C++17 or later)
 - CMake (3.15 or later)
 - Boost (1.62 or later)
-- Eigen (3.3.4 or later)
-- {fmt}
-- range-v3
-- OpenMP
 - zlib
+- Eigen (3.3.4 or later) *
+- {fmt} *
+- range-v3 *
+- highway *
 
-We recommend installing dependencies using vcpkg, distributed with this repository as a submodule.
-Information below.
+We recommend installing Boost and zlib using your system's package manager (e.g., `apt` on Ubuntu, `brew` on macOS).
+Dependencies marked with an asterisk (*) will be fetched automatically by CMake.
 
 Building the optional Python bindings additionally requires:
 
