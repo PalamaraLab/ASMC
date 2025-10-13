@@ -28,7 +28,7 @@ typedef int64_t int64;
 typedef uint64_t hash_size;
 
 struct uint64_masks {
-	uint64 is0, is2, is9;
+  uint64 is0, is2, is9;
 };
 
 #endif

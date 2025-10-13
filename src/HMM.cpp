@@ -30,7 +30,6 @@
 #include <fmt/format.h>
 
 #include "HmmUtils.hpp"
-#include "MemoryUtils.hpp"
 #include "Simd.hpp"
 #include "StringUtils.hpp"
 #include "Timer.hpp"

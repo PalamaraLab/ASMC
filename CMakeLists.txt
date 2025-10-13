@@ -85,7 +85,6 @@ set(ASMC_source
         ${ASMC_source_dir}/FastSMC.cpp
         ${ASMC_source_dir}/FileUtils.cpp
         ${ASMC_source_dir}/Individual.cpp
-        ${ASMC_source_dir}/MemoryUtils.cpp
         ${ASMC_source_dir}/Simd.cpp
         ${ASMC_source_dir}/StringUtils.cpp
         ${ASMC_source_dir}/Timer.cpp
@@ -105,17 +104,17 @@ set(ASMC_headers
         ${ASMC_source_dir}/FileUtils.hpp
         ${ASMC_source_dir}/IbdPairDataLine.hpp
         ${ASMC_source_dir}/Individual.hpp
-        ${ASMC_source_dir}/MemoryUtils.hpp
         ${ASMC_source_dir}/Simd.hpp
         ${ASMC_source_dir}/StringUtils.hpp
         ${ASMC_source_dir}/Timer.hpp
+        ${ASMC_source_dir}/Types.hpp
         ${ASMC_source_dir}/ASMC.hpp
         ${ASMC_source_dir}/hashing/ExtendHash.hpp
         ${ASMC_source_dir}/hashing/Individuals.hpp
         ${ASMC_source_dir}/hashing/Match.hpp
         ${ASMC_source_dir}/hashing/SeedHash.hpp
         ${ASMC_source_dir}/hashing/Utils.hpp
-        )
+)
 
 set(ASMC_main
         ${ASMC_exe_dir}/main.cpp
