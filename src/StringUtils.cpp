@@ -13,15 +13,14 @@
 //    You should have received a copy of the GNU General Public License
 //    along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
-
-#include <vector>
-#include <string>
-#include <cstdlib>
-#include <cstdio>
+#include <cerrno>
+#include <charconv>
 #include <iostream>
+#include <limits>
 #include <sstream>
-
-//#include <sys/types.h>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 #include "StringUtils.hpp"
 #include "Types.hpp"
@@ -33,14 +32,30 @@ using std::cout;
 using std::cerr;
 using std::endl;
 
+long double internal_stold(const std::string &str)
+{
+  long double value = {};
+  auto [ptr, ec] = std::from_chars(str.data(), str.data() + str.size(), value);
+
+  if (ec == std::errc::invalid_argument || ptr != str.data() + str.size()) {
+    throw std::invalid_argument("invalid numeric string");
+  }
+
+  if (ec == std::errc::result_out_of_range) {
+    return std::strtold(str.c_str(), nullptr);
+  }
+
+  return value;
+}
+
 float stof(const std::string &str)
 {
-  return static_cast<float>(std::stold(str));
+  return static_cast<float>(internal_stold(str));
 }
 
 double stod(const std::string &str)
 {
-  return static_cast<double>(std::stold(str));
+  return static_cast<double>(internal_stold(str));
 }
 
 string findDelimiters(const string &s, const string &c) {
