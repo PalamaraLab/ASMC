@@ -163,7 +163,7 @@ add_executable(convertBinary_exe ${convertBinary_main})
 target_link_libraries(convertBinary_exe PRIVATE ASMC)
 
 # boost as a required dependency for ASMC
-find_package(Boost CONFIG REQUIRED COMPONENTS iostreams program_options)
+find_package(Boost REQUIRED COMPONENTS iostreams program_options)
 target_link_libraries(ASMC PRIVATE Boost::iostreams Boost::program_options)
 target_link_libraries(ASMC PUBLIC Boost::boost)
 
