@@ -20,13 +20,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-13
-#          - os: macos-14
+          - os: macos-15
 
     steps:
 
       - name: checkout repo & submodules
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: true
           fetch-depth: 0
