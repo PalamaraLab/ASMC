@@ -15,8 +15,6 @@
 
 #include "HmmUtils.hpp"
 
-#include "AvxDefinitions.hpp"
-
 #include <algorithm>
 #include <cassert>
 #include <cmath>
@@ -97,57 +95,6 @@ void printPctTime(const std::string& str, double fracTime, std::ostream& os)
 {
   os << "Time in " << std::setw(14) << std::left << str << " : " << std::setw(5) << std::right
      << std::setprecision(1) << std::fixed << 100.0 * fracTime << "%\n" << std::flush;
-}
-
-void calculateScalingBatch(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::ArrayXf> scalings,
-                           Eigen::Ref<Eigen::ArrayXf> sums, const int batchSize, const int numStates)
-{
-  for (int i = 0; i < batchSize; ++i) {
-    sums(i) = 0.f;
-  }
-
-#ifdef NO_SSE
-  // compute scaling (sum of current alpha/beta vector)
-  for (int stateIdx = 0; stateIdx < numStates; ++stateIdx) {
-    for (int batchItem = 0; batchItem < batchSize; ++batchItem) {
-      sums[batchItem] += vec[stateIdx * batchSize + batchItem];
-    }
-  }
-  for (int batchItem = 0; batchItem < batchSize; ++batchItem) {
-    scalings[batchItem] = 1.0f / sums[batchItem];
-  }
-#else
-  // compute scaling (sum of current alpha/beta vector)
-  for (int stateIdx = 0; stateIdx < numStates; ++stateIdx) {
-    for (int batchItem = 0; batchItem < batchSize; batchItem += VECX) {
-      STORE(&sums(batchItem), ADD(LOAD(&sums(batchItem)), LOAD(&vec(stateIdx * batchSize + batchItem))));
-    }
-  }
-  for (int batchItem = 0; batchItem < batchSize; ++batchItem) {
-    scalings(batchItem) = 1.0f / sums(batchItem);
-  }
-#endif
-}
-
-void applyScalingBatch(Eigen::Ref<Eigen::ArrayXf> vec, Eigen::Ref<Eigen::ArrayXf> scalings,
-                       const int batchSize, const int numStates)
-{
-#ifdef NO_SSE
-  // modify current alpha/beta vector by prescribed scaling
-  for (int stateIdx = 0; stateIdx < numStates; ++stateIdx) {
-    for (int batchItem = 0; batchItem < batchSize; batchItem++) {
-      vec[stateIdx * batchSize + batchItem] *= scalings[batchItem];
-    }
-  }
-#else
-  // modify current alpha/beta vector by prescribed scaling
-  for (int stateIdx = 0; stateIdx < numStates; ++stateIdx) {
-    for (int batchItem = 0; batchItem < batchSize; batchItem += VECX) {
-      STORE(&vec(stateIdx * batchSize + batchItem),
-            MULT(LOAD(&vec(stateIdx * batchSize + batchItem)), LOAD(&scalings(batchItem))));
-    }
-  }
-#endif
 }
 
 unsigned getFromPosition(const std::vector<float>& geneticPositions, unsigned from, const float cmDist)

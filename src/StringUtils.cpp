@@ -13,37 +13,61 @@
 //    You should have received a copy of the GNU General Public License
 //    along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
-
-#include <vector>
-#include <string>
-#include <cstdlib>
-#include <cstdio>
+#include <cerrno>
 #include <iostream>
 #include <sstream>
-
-//#include <sys/types.h>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 #include "StringUtils.hpp"
 #include "Types.hpp"
 
-namespace StringUtils {
-using std::vector;
-using std::string;
-using std::cout;
+namespace StringUtils
+{
 using std::cerr;
+using std::cout;
 using std::endl;
+using std::string;
+using std::vector;
 
-float stof(const std::string &str)
+long double internal_stold(const std::string& str)
 {
-  return static_cast<float>(std::stold(str));
+  if (str.empty()) {
+    throw std::invalid_argument("invalid numeric string");
+  }
+
+  errno = 0;
+  char* end = nullptr;
+  const char* s = str.c_str();
+  const long double v = std::strtold(s, &end);
+
+  // no conversion performed
+  if (end == s) {
+    throw std::invalid_argument("invalid numeric string");
+  }
+
+  // ensure whole string was consumed
+  if (end != s + str.size()) {
+    throw std::invalid_argument("invalid numeric string");
+  }
+
+  // strtold always returns the closest representable number, including on underflow
+  return v;
 }
 
-double stod(const std::string &str)
+float stof(const std::string& str)
 {
-  return static_cast<double>(std::stold(str));
+  return static_cast<float>(internal_stold(str));
 }
 
-string findDelimiters(const string &s, const string &c) {
+double stod(const std::string& str)
+{
+  return static_cast<double>(internal_stold(str));
+}
+
+string findDelimiters(const string& s, const string& c)
+{
   string delims;
   for (uint p = 0; p < s.length(); p++)
     if (c.find(s[p], 0) != string::npos)
@@ -51,10 +75,10 @@ string findDelimiters(const string &s, const string &c) {
   return delims;
 }
 // will not return blanks
-vector <string> tokenizeMultipleDelimiters(const string &s, const string &c)
+vector<string> tokenizeMultipleDelimiters(const string& s, const string& c)
 {
   uint p = 0;
-  vector <string> ans;
+  vector<string> ans;
   string tmp;
   while (p < s.length()) {
     tmp = "";
@@ -70,31 +94,34 @@ vector <string> tokenizeMultipleDelimiters(const string &s, const string &c)
   return ans;
 }
 
-void rangeErrorExit(const string &str, const string &delims) {
+void rangeErrorExit(const string& str, const string& delims)
+{
   cerr << "ERROR: Invalid delimiter sequence for specifying range: " << endl;
   cerr << "  Template string: " << str << endl;
   cerr << "  Delimiter sequence found: " << delims << endl;
-  cerr << "Range in must have format {start:end} with no other " << RANGE_DELIMS
-       << " chars" << endl;
+  cerr << "Range in must have format {start:end} with no other " << RANGE_DELIMS << " chars" << endl;
   exit(1);
 }
 
 // basic range template: expand "{start:end}" to vector <string> with one entry per range element
 // if end==start-1, will return empty
-vector <string> expandRangeTemplate(const string &str) {
-  vector <string> ret;
+vector<string> expandRangeTemplate(const string& str)
+{
+  vector<string> ret;
   string delims = findDelimiters(str, RANGE_DELIMS);
   if (delims.empty())
     ret.push_back(str);
   else if (delims == RANGE_DELIMS) {
-    vector <string> tokens = tokenizeMultipleDelimiters(str, RANGE_DELIMS);
-    for (int i = 0; i < (int) str.size(); i++)
+    vector<string> tokens = tokenizeMultipleDelimiters(str, RANGE_DELIMS);
+    for (int i = 0; i < (int)str.size(); i++)
       if (str[i] == ':' && (str[i - 1] == '{' || str[i + 1] == '}'))
         rangeErrorExit(str, delims);
     int startInd = (str[0] != RANGE_DELIMS[0]), endInd = startInd + 1;
     string prefix, suffix;
-    if (str[0] != RANGE_DELIMS[0]) prefix = tokens[0];
-    if (str[str.length() - 1] != RANGE_DELIMS[2]) suffix = tokens.back();
+    if (str[0] != RANGE_DELIMS[0])
+      prefix = tokens[0];
+    if (str[str.length() - 1] != RANGE_DELIMS[2])
+      suffix = tokens.back();
     int start = std::stoi(tokens[startInd]), end = std::stoi(tokens[endInd]);
     if (start > end + 1 || end > start + 1000000) {
       cerr << "ERROR: Invalid range in template string: " << str << endl;
@@ -104,18 +131,18 @@ vector <string> expandRangeTemplate(const string &str) {
     }
     for (int i = start; i <= end; i++)
       ret.push_back(prefix + std::to_string(i) + suffix);
-  }
-  else
+  } else
     rangeErrorExit(str, delims);
   return ret;
 }
 
-vector <string> expandRangeTemplates(const vector <string> &rangeTemplates) {
-  vector <string> expanded;
+vector<string> expandRangeTemplates(const vector<string>& rangeTemplates)
+{
+  vector<string> expanded;
   for (uint i = 0; i < rangeTemplates.size(); i++) {
-    vector <string> range = expandRangeTemplate(rangeTemplates[i]);
+    vector<string> range = expandRangeTemplate(rangeTemplates[i]);
     expanded.insert(expanded.end(), range.begin(), range.end());
   }
   return expanded;
 }
-}
+} // namespace StringUtils

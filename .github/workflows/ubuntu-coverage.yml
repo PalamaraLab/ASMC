@@ -10,25 +10,22 @@ jobs:
 
   build-and-test:
     name: Coverage on Ubuntu
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     if: ${{ github.repository == 'PalamaraLab/ASMC' }}
+    timeout-minutes: 10
 
     steps:
 
       - name: checkout repo & submodules
-        uses: actions/checkout@v3
+        uses: actions/checkout@v5
         with:
           submodules: true
           fetch-depth: 0
 
-      - name: cache vcpkg installed packages
-        uses: actions/cache@v4
-        id: cache
-        with:
-          path: |
-            vcpkg/
-            build_dir/vcpkg_installed/
-          key: ${{ runner.os }}-${{ env.CXX }}-${{ hashFiles('vcpkg.json', 'vcpkg/CHANGELOG.md') }}
+      - name: install deps
+        run: |
+          sudo apt -y update
+          sudo apt -y install libboost-iostreams-dev libboost-program-options-dev zlib1g-dev
 
       - name: install tools
         run: |

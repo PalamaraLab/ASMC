@@ -48,9 +48,9 @@ TEST_CASE("test string conversions", "[StringUtils]") {
   CHECK(StringUtils::stof(str_1e0) == 1.f);
   CHECK(StringUtils::stof(str_minus1_0) == -1.f);
   CHECK(StringUtils::stof(too_small_str) == static_cast<float>(too_small_ld));
+  CHECK(StringUtils::stof(way_too_small) == 0.f);
   CHECK(std::isnan(StringUtils::stof(nan)));
   CHECK(std::isinf(StringUtils::stof(inf)));
-  CHECK_THROWS_AS(StringUtils::stof(way_too_small), std::out_of_range);
   CHECK_THROWS_AS(StringUtils::stof(greeting), std::invalid_argument);
 
   // Check stod
@@ -60,7 +60,7 @@ TEST_CASE("test string conversions", "[StringUtils]") {
   CHECK(StringUtils::stod(too_small_str) == static_cast<double>(too_small_ld));
   CHECK(std::isnan(StringUtils::stod(nan)));
   CHECK(std::isinf(StringUtils::stod(inf)));
-  CHECK_THROWS_AS(StringUtils::stod(way_too_small), std::out_of_range);
+  CHECK(StringUtils::stod(way_too_small) == 0.0);
   CHECK_THROWS_AS(StringUtils::stod(greeting), std::invalid_argument);
 }
 

@@ -23,10 +23,15 @@
 #include "DecodingParams.hpp"
 #include "FastSMC.hpp"
 #include "FileUtils.hpp"
+#include "Simd.hpp"
 #include "Timer.hpp"
 
 TEST_CASE("test FastSMC with hashing regression test", "[FastSMC_regression]")
 {
+  // This test is designed to work with AVX2. It may work with other SIMD instruction sets, but it is possible that
+  // the test could fail with minor numerical differences.
+  asmc::warnIfSimdMismatch("AVX2");
+
   DecodingParams params;
   params.decodingQuantFile = ASMC_DATA_DIR "/decoding_quantities/10-20-2000_CEU.decodingQuantities.gz";
   params.inFileRoot = ASMC_DATA_DIR "/examples/fastsmc/example";
@@ -114,6 +119,10 @@ TEST_CASE("test FastSMC with hashing regression test", "[FastSMC_regression]")
 
 TEST_CASE("test FastSMC with hashing only (GERMLINE2)", "[FastSMC_regression]")
 {
+  // This test is designed to work with AVX2. It may work with other SIMD instruction sets, but it is possible that
+  // the test could fail with minor numerical differences.
+  asmc::warnIfSimdMismatch("AVX2");
+
   DecodingParams params;
   params.decodingQuantFile = ASMC_DATA_DIR "/decoding_quantities/10-20-2000_CEU.decodingQuantities.gz";
   params.inFileRoot = ASMC_DATA_DIR "/examples/fastsmc/example";
@@ -196,6 +205,10 @@ TEST_CASE("test FastSMC with hashing only (GERMLINE2)", "[FastSMC_regression]")
 
 TEST_CASE("test FastSMC without hashing regression test", "[FastSMC_regression]")
 {
+  // This test is designed to work with AVX2. It may work with other SIMD instruction sets, but it is possible that
+  // the test could fail with minor numerical differences.
+  asmc::warnIfSimdMismatch("AVX2");
+
   DecodingParams params;
   params.decodingQuantFile = ASMC_DATA_DIR "/decoding_quantities/10-20-2000_CEU.decodingQuantities.gz";
   params.inFileRoot = ASMC_DATA_DIR "/examples/fastsmc/example";

@@ -18,8 +18,6 @@
 
 #include <string>
 
-#include <boost/program_options.hpp>
-
 enum class DecodingMode { sequenceFolded, arrayFolded, sequence, array };
 
 enum class DecodingModeOverall { sequence, array };

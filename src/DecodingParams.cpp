@@ -14,6 +14,7 @@
 //    along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
 #include "DecodingParams.hpp"
+#include "Simd.hpp"
 #include "Types.hpp"
 
 #include <boost/algorithm/string.hpp>
@@ -322,10 +323,8 @@ bool DecodingParams::validateParamsFastSMC()
     }
   }
 
-  if (batchSize == 0 || batchSize % 8 != 0) {
-    std::cerr << del << "batchSize must be strictly positive and a multiple of 8." << std::endl;
-    exit(1);
-  }
+  // batchSize must be a positive multiple of the number of SIMD lanes
+  asmc::validateBatchSize(batchSize);
 
   if (compress) {
     if (useAncestral) {

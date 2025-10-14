@@ -4,12 +4,6 @@
 cmake_minimum_required(VERSION 3.15)
 message(STATUS "CMake version: ${CMAKE_VERSION}")
 
-include(cmake/CheckDataModule.cmake)
-
-if(NOT ASMC_AVOID_VCPKG)
-    include(cmake/AutodetectVcpkgToolchainFile.cmake)
-endif()
-
 project(asmc LANGUAGES CXX VERSION 1.3.1)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -32,6 +26,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 #export compiler flags for code completion engines
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 
+option(ASMC_PYTHON_BINDINGS "Whether to build the python bindings" OFF)
+if (ASMC_PYTHON_BINDINGS)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif ()
+
 # Set global compiler warnings for debug builds
 if(CMAKE_BUILD_TYPE MATCHES "Deb")
     if (MSVC)
@@ -41,13 +40,11 @@ if(CMAKE_BUILD_TYPE MATCHES "Deb")
     endif ()
 endif()
 
-# Set SIMD compiler options
-include(cmake/SIMD.cmake)
 
 set(ASMC_exe_dir ${CMAKE_CURRENT_SOURCE_DIR}/exe)
 set(ASMC_source_dir ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(ASMC_test_dir ${CMAKE_CURRENT_SOURCE_DIR}/test)
-set(ASMC_data_module_dir ${CMAKE_CURRENT_SOURCE_DIR}/DataModule)
+set(ASMC_data_module_dir ${CMAKE_CURRENT_SOURCE_DIR}/src/data_module)
 set(ASMC_data_dir ${CMAKE_CURRENT_SOURCE_DIR}/ASMC_data)
 add_definitions(-DASMC_TEST_DIR=\"${ASMC_test_dir}\")
 add_definitions(-DASMC_DATA_DIR=\"${ASMC_data_dir}\")
@@ -60,34 +57,35 @@ if (NOT EXISTS ${ASMC_data_dir}/README.md)
 endif ()
 
 set(ASMC_data_module_source
-        ${ASMC_data_module_dir}/src/GeneticMap.cpp
-        ${ASMC_data_module_dir}/src/PlinkMap.cpp
-        ${ASMC_data_module_dir}/src/utils/FileUtils.cpp
-        ${ASMC_data_module_dir}/src/utils/StringUtils.cpp
+        ${ASMC_data_module_dir}/GeneticMap.cpp
+        ${ASMC_data_module_dir}/PlinkMap.cpp
+        ${ASMC_data_module_dir}/utils/FileUtils.cpp
+        ${ASMC_data_module_dir}/utils/StringUtils.cpp
         )
 
 set(ASMC_data_module_headers
-        ${ASMC_data_module_dir}/src/GeneticMap.hpp
-        ${ASMC_data_module_dir}/src/PlinkMap.hpp
-        ${ASMC_data_module_dir}/src/utils/FileUtils.hpp
-        ${ASMC_data_module_dir}/src/utils/StringUtils.hpp
-        ${ASMC_data_module_dir}/src/utils/VectorUtils.hpp
+        ${ASMC_data_module_dir}/GeneticMap.hpp
+        ${ASMC_data_module_dir}/PlinkMap.hpp
+        ${ASMC_data_module_dir}/utils/FileUtils.hpp
+        ${ASMC_data_module_dir}/utils/StringUtils.hpp
+        ${ASMC_data_module_dir}/utils/VectorUtils.hpp
         )
 
 # The ASMC Data Module library
 add_library(ASMC_data_module ${ASMC_data_module_source} ${ASMC_data_module_headers})
-target_include_directories(ASMC_data_module PUBLIC ${ASMC_data_module_dir}/src)
+target_include_directories(ASMC_data_module PUBLIC ${ASMC_data_module_dir})
 
 set(ASMC_source
         ${ASMC_source_dir}/HMM.cpp
         ${ASMC_source_dir}/HmmUtils.cpp
+        ${ASMC_source_dir}/BinaryDataReader.cpp
         ${ASMC_source_dir}/Data.cpp
         ${ASMC_source_dir}/DecodingParams.cpp
         ${ASMC_source_dir}/DecodingQuantities.cpp
         ${ASMC_source_dir}/FastSMC.cpp
         ${ASMC_source_dir}/FileUtils.cpp
         ${ASMC_source_dir}/Individual.cpp
-        ${ASMC_source_dir}/MemoryUtils.cpp
+        ${ASMC_source_dir}/Simd.cpp
         ${ASMC_source_dir}/StringUtils.cpp
         ${ASMC_source_dir}/Timer.cpp
         ${ASMC_source_dir}/ASMC.cpp
@@ -95,7 +93,6 @@ set(ASMC_source
         )
 
 set(ASMC_headers
-        ${ASMC_source_dir}/AvxDefinitions.hpp
         ${ASMC_source_dir}/BinaryDataReader.hpp
         ${ASMC_source_dir}/HMM.hpp
         ${ASMC_source_dir}/HmmUtils.hpp
@@ -105,17 +102,19 @@ set(ASMC_headers
         ${ASMC_source_dir}/DecodingQuantities.hpp
         ${ASMC_source_dir}/FastSMC.hpp
         ${ASMC_source_dir}/FileUtils.hpp
+        ${ASMC_source_dir}/IbdPairDataLine.hpp
         ${ASMC_source_dir}/Individual.hpp
-        ${ASMC_source_dir}/MemoryUtils.hpp
+        ${ASMC_source_dir}/Simd.hpp
         ${ASMC_source_dir}/StringUtils.hpp
         ${ASMC_source_dir}/Timer.hpp
+        ${ASMC_source_dir}/Types.hpp
         ${ASMC_source_dir}/ASMC.hpp
         ${ASMC_source_dir}/hashing/ExtendHash.hpp
         ${ASMC_source_dir}/hashing/Individuals.hpp
         ${ASMC_source_dir}/hashing/Match.hpp
         ${ASMC_source_dir}/hashing/SeedHash.hpp
         ${ASMC_source_dir}/hashing/Utils.hpp
-        )
+)
 
 set(ASMC_main
         ${ASMC_exe_dir}/main.cpp
@@ -138,6 +137,7 @@ set(ASMC_unit_tests
         ${ASMC_test_dir}/test_hmm_utils.cpp
         ${ASMC_test_dir}/test_decoding_params.cpp
         ${ASMC_test_dir}/test_decoding_quantities.cpp
+        ${ASMC_test_dir}/test_SIMD.cpp
         )
 
 set(ASMC_regression
@@ -145,30 +145,10 @@ set(ASMC_regression
         ${ASMC_test_dir}/test_fastsmc_regression.cpp
         )
 
-if (NOT ASMC_NO_PYTHON)
-    option(ASMC_PYTHON_BINDINGS "Whether to build the ASMC python bindings" OFF)
-    if (EXISTS ${CMAKE_SOURCE_DIR}/pybind11/LICENSE)
-        set(ASMC_PYTHON_BINDINGS ON)
-    endif ()
-    if (ASMC_PYTHON_BINDINGS)
-        find_package(Python3 3.6 COMPONENTS Interpreter Development.Module REQUIRED)
-        add_subdirectory(pybind11)
-        pybind11_add_module(asmc_python_bindings ${ASMC_source_dir}/pybind.cpp)
-        target_link_libraries(asmc_python_bindings PRIVATE ASMC)
-    endif ()
-endif ()
-
 # The main ASMC library
 add_library(ASMC ${ASMC_source} ${ASMC_headers})
 target_include_directories(ASMC PUBLIC ${ASMC_source_dir})
 target_link_libraries(ASMC PRIVATE ASMC_data_module)
-
-# Link against std filesystem on GCC < 8.4
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 8.4)
-        target_link_libraries(ASMC PRIVATE stdc++fs)
-    endif ()
-endif ()
 
 # The main ASMC executable
 add_executable(ASMC_exe ${ASMC_main})
@@ -182,71 +162,108 @@ target_link_libraries(FastSMC_exe PRIVATE ASMC)
 add_executable(convertBinary_exe ${convertBinary_main})
 target_link_libraries(convertBinary_exe PRIVATE ASMC)
 
-
-if (ASMC_TESTING)
-    enable_testing()
-
-    add_executable(ASMC_unit_tests ${ASMC_unit_tests})
-    target_include_directories(ASMC_unit_tests PRIVATE ${ASMC_test_dir})
-    target_link_libraries(ASMC_unit_tests PRIVATE ASMC)
-    add_test(Asmc_unit_tests ASMC_unit_tests)
-
-    add_executable(ASMC_regression ${ASMC_regression})
-    target_include_directories(ASMC_regression PRIVATE ${ASMC_test_dir})
-    target_link_libraries(ASMC_regression PRIVATE ASMC ASMC_data_module)
-    add_test(regression ASMC_regression)
-endif ()
-
 # boost as a required dependency for ASMC
 find_package(Boost REQUIRED COMPONENTS iostreams program_options)
-target_link_libraries(ASMC PRIVATE Boost::boost Boost::iostreams Boost::program_options)
-
-# Eigen is required
-find_package(Eigen3 CONFIG REQUIRED)
-target_link_libraries(ASMC PUBLIC Eigen3::Eigen)
+target_link_libraries(ASMC PRIVATE Boost::iostreams Boost::program_options)
+target_link_libraries(ASMC PUBLIC Boost::boost)
 
 # zlib is required (at least on Linux) for boost iostreams
 find_package(ZLIB REQUIRED)
 target_link_libraries(ASMC PRIVATE ZLIB::ZLIB)
 
-# openmp is a required dependency
-find_package(OpenMP REQUIRED)
-add_definitions(-DHAVE_OPENMP)
-target_link_libraries(ASMC PRIVATE OpenMP::OpenMP_CXX)
+include(FetchContent)
+set(FETCHCONTENT_QUIET ON)
 
-# fmt is required for efficient string formatting
-find_package(fmt CONFIG REQUIRED)
-target_link_libraries(ASMC PUBLIC fmt::fmt)
+# Fetch Eigen3
+set(EIGEN_BUILD_TESTING OFF CACHE BOOL "Disable range-v3 tests")
+FetchContent_Declare(
+        eigen
+        GIT_REPOSITORY https://gitlab.com/libeigen/eigen.git
+        GIT_TAG        68f4e58cfacc686583d16cff90361f0b43bc2c1b # Latest commit on 3.4 branch
+)
+FetchContent_MakeAvailable(eigen)
+target_link_libraries(ASMC PUBLIC Eigen3::Eigen)
 
-find_package(range-v3 CONFIG REQUIRED)
-message(STATUS "Found range-v3 ${range-v3_VERSION}")
+# Ensure Eigen aligns memory for SIMD (up to 64 bytes for AVX512)
+add_compile_definitions(EIGEN_MAX_ALIGN_BYTES=64)
+
+# Fetch fmt
+set(FMT_TEST OFF CACHE BOOL "Disable fmt tests")
+FetchContent_Declare(
+        fmt
+        GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+        GIT_TAG        e69e5f977d458f2650bb346dadf2ad30c5320281 # v10.2.1
+)
+FetchContent_MakeAvailable(fmt)
+target_link_libraries(ASMC PRIVATE fmt::fmt)
+
+# Fetch range-v3
+set(RANGE_V3_TESTS OFF CACHE BOOL "Disable range-v3 tests")
+FetchContent_Declare(
+        range-v3
+        GIT_REPOSITORY https://github.com/ericniebler/range-v3.git
+        GIT_TAG        a81477931a8aa2ad025c6bda0609f38e09e4d7ec  # v0.12.0
+)
+FetchContent_MakeAvailable(range-v3)
+
+# Fetch Highway
+set(HWY_ENABLE_TESTS OFF CACHE BOOL "Disable Highway tests" FORCE)
+set(HWY_ENABLE_CONTRIB OFF CACHE BOOL "Disable Highway contrib" FORCE)
+set(HWY_ENABLE_EXAMPLES OFF CACHE BOOL "Disable Highway examples" FORCE)
+FetchContent_Declare(
+        highway
+        GIT_REPOSITORY https://github.com/google/highway.git
+        GIT_TAG        457c891775a7397bdb0376bb1031e6e027af1c48 # v1.2.0
+)
+FetchContent_MakeAvailable(highway)
+target_link_libraries(ASMC PRIVATE hwy)
+target_compile_definitions(ASMC PRIVATE HWY_DYNAMIC_DISPATCH=1)
+
+if (ASMC_DISABLE_SIMD)
+    target_compile_definitions(ASMC PUBLIC HWY_COMPILE_ONLY_SCALAR=1 ASMC_SIMD_DISABLED=1)
+endif ()
+
 target_link_libraries(ASMC_data_module PRIVATE Eigen3::Eigen fmt::fmt range-v3 ZLIB::ZLIB)
 
-
-# Optionally run regression tests to ensure core functionality remains unchanged
-if (NOT ASMC_NO_PYTHON)
-    option(ASMC_REGRESSION_TESTING "Whether to generate regression testing target" OFF)
-    if (ASMC_REGRESSION_TESTING)
-
-        # Python is required for running regression tests
-        find_package(Python3 3.6 COMPONENTS Interpreter REQUIRED)
-
-        add_custom_target(
-                Regression
-                COMMAND ${Python3_EXECUTABLE} regression_test.py $<TARGET_FILE:ASMC_exe>
-                DEPENDS ASMC_exe
-                COMMENT "Running ASMC regression test"
-                WORKING_DIRECTORY ${ASMC_test_dir}
-        )
-
-    endif ()
-endif ()
-
-# Need position independent code for Python bindings
+# Python bindings
 if (ASMC_PYTHON_BINDINGS)
-    set_target_properties(ASMC PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
-    set_target_properties(ASMC_data_module PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+    option(ASMC_BUILDING_FROM_PYPROJECT "Are we building from pyproject.toml (pip install)?" OFF)
+
+    if(ASMC_BUILDING_FROM_PYPROJECT)
+        message(STATUS "Using pybind11 from pyproject.toml build environment")
+        find_package(pybind11 REQUIRED)
+    else()
+        message(STATUS "Using FetchContent to get pybind11")
+        include(FetchContent)
+        FetchContent_Declare(
+                pybind11
+                GIT_REPOSITORY https://github.com/pybind/pybind11.git
+                GIT_TAG f5fbe867d2d26e4a0a9177a51f6e568868ad3dc8 # Version 3.0.1
+        )
+        FetchContent_MakeAvailable(pybind11)
+    endif()
+
+    pybind11_add_module(asmc_python_bindings ${ASMC_source_dir}/pybind.cpp)
+    target_link_libraries(asmc_python_bindings PRIVATE ASMC)
+    install(TARGETS asmc_python_bindings LIBRARY DESTINATION asmc/asmc)
 endif ()
+
+
+# Testing targets
+if (ASMC_TESTING)
+    enable_testing()
+
+    add_executable(ASMC_unit_tests ${ASMC_unit_tests})
+    target_include_directories(ASMC_unit_tests PRIVATE ${ASMC_test_dir})
+    target_link_libraries(ASMC_unit_tests PRIVATE ASMC fmt::fmt)
+    add_test(Asmc_unit_tests ASMC_unit_tests)
+
+    add_executable(ASMC_regression ${ASMC_regression})
+    target_include_directories(ASMC_regression PRIVATE ${ASMC_test_dir})
+    target_link_libraries(ASMC_regression PRIVATE ASMC ASMC_data_module)
+    add_test(NAME regression COMMAND ASMC_regression)
+endif ()
+
 
 # Clang tidy as optional static analyzer
 option(Template_USE_CLANG_TIDY "Use clang tidy for static analysis" OFF)
@@ -290,3 +307,13 @@ if (ASMC_ENABLE_COVERAGE)
         message(FATAL_ERROR "GCC or Clang required with ASMC_ENABLE_COVERAGE: found ${CMAKE_CXX_COMPILER_ID}")
     endif ()
 endif ()
+
+option(ASMC_ENABLE_FAST_MATH "Enable fast math optimizations" OFF)
+if(ASMC_ENABLE_FAST_MATH)
+    message(STATUS "Build with fast math optimizations")
+
+    if((CMAKE_CXX_COMPILER_ID MATCHES "Clang") OR (CMAKE_CXX_COMPILER_ID MATCHES "GNU"))
+        add_compile_options(-ffast-math)
+    endif ()
+
+endif()

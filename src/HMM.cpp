@@ -29,9 +29,8 @@
 
 #include <fmt/format.h>
 
-#include "AvxDefinitions.hpp"
 #include "HmmUtils.hpp"
-#include "MemoryUtils.hpp"
+#include "Simd.hpp"
 #include "StringUtils.hpp"
 #include "Timer.hpp"
 
@@ -67,12 +66,14 @@ HMM::HMM(Data _data, const DecodingParams& _decodingParams, int _scalingSkip)
     : data(std::move(_data)), m_decodingQuant(_decodingParams.decodingQuantFile), decodingParams(_decodingParams),
       scalingSkip(_scalingSkip), noBatches(_decodingParams.noBatches)
 {
+
   if (decodingParams.hashing && !decodingParams.FastSMC) {
     cerr << "Identification only is not yet supported Cannot have hashing==true and FastSMC==false.\n";
     exit(1);
   }
 
-  cout << "Will decode using " << MODE << " instruction set.\n\n";
+  asmc::printRuntimeSimdInfo();
+
   outFileRoot = decodingParams.outFileRoot;
   expectedCoalTimesFile = decodingParams.expectedCoalTimesFile;
   sequenceLength = data.sites;
@@ -84,6 +85,7 @@ HMM::HMM(Data _data, const DecodingParams& _decodingParams, int _scalingSkip)
   prepareEmissions();
 
   m_batchSize = decodingParams.batchSize;
+  asmc::validateBatchSize(m_batchSize);
 
   for (int i = 0; i < m_batchSize; i++) {
     fromBatch.push_back(0);
@@ -640,8 +642,8 @@ void HMM::runLastBatch(vector<PairObservations>& obsBatch)
     }
   }
 
-  // fill to size divisible by VECX
-  while (obsBatch.size() % VECX != 0) {
+  // fill to size divisible by number of SIMD lanes
+  while (obsBatch.size() % asmc::getNumSimdLanes() != 0) {
     obsBatch.push_back(obsBatch.back());
   }
 
@@ -665,8 +667,8 @@ void HMM::runLastBatch(vector<PairObservations>& obsBatch)
 // decode a batch
 void HMM::decodeBatch(const vector<PairObservations>& obsBatch, const unsigned from, const unsigned to)
 {
-
   int curBatchSize = static_cast<int>(obsBatch.size());
+  asmc::validateBatchSize(curBatchSize);
 
   Eigen::ArrayXf obsIsZeroBatch(sequenceLength * curBatchSize);
   Eigen::ArrayXf obsIsTwoBatch(sequenceLength * curBatchSize);
@@ -694,55 +696,7 @@ void HMM::decodeBatch(const vector<PairObservations>& obsBatch, const unsigned f
 
   // combine (alpha * beta), normalize and store
   Eigen::Map<Eigen::ArrayXf> scale(obsIsZeroBatch.data(), obsIsZeroBatch.size()); // reuse buffer but rename to be less confusing
-  scale.setZero();
-#ifdef NO_SSE
-  for (long int pos = from; pos < to; pos++) {
-    for (int k = 0; k < states; k++) {
-      for (int v = 0; v < curBatchSize; v++) {
-        long int ind = (pos * states + k) * curBatchSize + v;
-        m_alphaBuffer[ind] *= m_betaBuffer[ind];
-        scale[pos * curBatchSize + v] += m_alphaBuffer[ind];
-      }
-    }
-  }
-  for (long int pos = from; pos < to; pos++) {
-    for (int v = 0; v < curBatchSize; v++) {
-      scale[pos * curBatchSize + v] = 1.0f / scale[pos * curBatchSize + v];
-    }
-  }
-  for (long int pos = from; pos < to; pos++) {
-    for (int k = 0; k < states; k++) {
-      for (int v = 0; v < curBatchSize; v++) {
-        m_alphaBuffer[(pos * states + k) * curBatchSize + v] *= scale[pos * curBatchSize + v];
-      }
-    }
-  }
-#else
-  for (long int pos = from; pos < to; pos++) {
-    for (int k = 0; k < states; k++) {
-      for (int v = 0; v < curBatchSize; v += VECX) {
-        long int ind = (pos * states + k) * curBatchSize + v;
-        FLOAT prod = MULT(LOAD(&m_alphaBuffer[ind]), LOAD(&m_betaBuffer[ind]));
-        STORE(&m_alphaBuffer[ind], prod);
-        STORE(&scale[pos * curBatchSize + v], ADD(LOAD(&scale[pos * curBatchSize + v]), prod));
-      }
-    }
-  }
-  for (long int pos = from; pos < to; pos++) {
-    for (int v = 0; v < curBatchSize; v += VECX) {
-      long int ind = pos * curBatchSize + v;
-      STORE(&scale[ind], RECIPROCAL(LOAD(&scale[ind])));
-    }
-  }
-  for (long int pos = from; pos < to; pos++) {
-    for (int k = 0; k < states; k++) {
-      for (int v = 0; v < curBatchSize; v += VECX) {
-        long int ind = (pos * states + k) * curBatchSize + v;
-        STORE(&m_alphaBuffer[ind], MULT(LOAD(&m_alphaBuffer[ind]), LOAD(&scale[pos * curBatchSize + v])));
-      }
-    }
-  }
-#endif
+  asmc::normalizeAlphaWithBeta(m_alphaBuffer, m_betaBuffer, scale, curBatchSize, states, from, to);
 
   auto t3 = std::chrono::high_resolution_clock::now();
   ticksCombine += t3 - t2;
@@ -753,7 +707,7 @@ void HMM::forwardBatch(Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch, Eigen::Ref<Eig
                        int curBatchSize, const unsigned from, const unsigned to)
 {
 
-  assert(curBatchSize % VECX == 0);
+  assert(curBatchSize % asmc::getNumSimdLanes() == 0);
 
   Eigen::ArrayXf alphaC(states * curBatchSize);
   Eigen::ArrayXf AU(curBatchSize);
@@ -823,86 +777,16 @@ void HMM::getNextAlphaBatched(float recDistFromPrevious, Eigen::Ref<Eigen::Array
   const float* U = &m_decodingQuant.Uvectors.at(recDistFromPrevious)[0];
   const float* D = &m_decodingQuant.Dvectors.at(recDistFromPrevious)[0];
 
-  memcpy(&alphaC[(states - 1) * curBatchSize], &previousAlpha[(states - 1) * curBatchSize],
-         curBatchSize * sizeof(alphaC[0]));
+  alphaC.segment((states - 1) * curBatchSize, curBatchSize) =
+      previousAlpha.segment((states - 1) * curBatchSize, curBatchSize);
 
-  for (int k = states - 2; k >= 0; k--) {
-#ifdef NO_SSE
-    for (int v = 0; v < curBatchSize; v++) {
-      alphaC[k * curBatchSize + v] = alphaC[(k + 1) * curBatchSize + v] + previousAlpha[k * curBatchSize + v];
-    }
-#else
-    for (int v = 0; v < curBatchSize; v += VECX) {
-      FLOAT alphaC_kp1_v = LOAD(&alphaC[(k + 1) * curBatchSize + v]);
-      FLOAT prevAlpha_k_v = LOAD(&previousAlpha[k * curBatchSize + v]);
-      STORE(&alphaC[k * curBatchSize + v], ADD(alphaC_kp1_v, prevAlpha_k_v));
-    }
-#endif
-  }
+  asmc::updateAlphaColumn(alphaC, previousAlpha, curBatchSize, states);
 
   AU.setZero();
-  for (int k = 0; k < states; k++) {
 
-#ifdef NO_SSE
-    for (int v = 0; v < curBatchSize; v++) {
-      if (k)
-        AU[v] = U[k - 1] * previousAlpha[(k - 1) * curBatchSize + v] + m_decodingQuant.columnRatios[k - 1] * AU[v];
-      float term = AU[v] + D[k] * previousAlpha[k * curBatchSize + v];
-      if (k < states - 1) {
-        term += B[k] * alphaC[(k + 1) * curBatchSize + v];
-      }
-      float currentEmission_k = emission1AtSite[k] + emission0minus1AtSite[k] * obsIsZeroBatch[pos * curBatchSize + v] +
-                                emission2minus0AtSite[k] * obsIsTwoBatch[pos * curBatchSize + v];
-      nextAlpha[k * curBatchSize + v] = currentEmission_k * term;
-    }
-#else
-#ifdef AVX512
-    FLOAT D_k = LOAD1(D[k]);
-    FLOAT B_k = LOAD1(B[k]);
-    FLOAT em1Prob_k = LOAD1(emission1AtSite[k]);
-    FLOAT em0minus1Prob_k = LOAD1(emission0minus1AtSite[k]);
-    FLOAT em2minus0Prob_k = LOAD1(emission2minus0AtSite[k]);
-#else
-    FLOAT D_k = LOAD1(&D[k]);
-    FLOAT B_k = LOAD1(&B[k]);
-    FLOAT em1Prob_k = LOAD1(&emission1AtSite[k]);
-    FLOAT em0minus1Prob_k = LOAD1(&emission0minus1AtSite[k]);
-    FLOAT em2minus0Prob_k = LOAD1(&emission2minus0AtSite[k]);
-#endif
-
-    FLOAT Ukm1, colRatios_km1;
-    if (k) {
-#ifdef AVX512
-      Ukm1 = LOAD1(U[k - 1]);
-      colRatios_km1 = LOAD1(m_decodingQuant.columnRatios[k - 1]);
-#else
-      Ukm1 = LOAD1(&U[k - 1]);
-      colRatios_km1 = LOAD1(&m_decodingQuant.columnRatios[k - 1]);
-#endif
-    }
-    for (int v = 0; v < curBatchSize; v += VECX) {
-      FLOAT AU_v;
-      if (k) {
-        FLOAT term1 = MULT(Ukm1, LOAD(&previousAlpha[(k - 1) * curBatchSize + v]));
-        FLOAT term2 = MULT(colRatios_km1, LOAD(&AU[v]));
-        AU_v = ADD(term1, term2);
-        STORE(&AU[v], AU_v);
-      } else
-        AU_v = LOAD(&AU[v]);
-
-      FLOAT term = ADD(AU_v, MULT(D_k, LOAD(&previousAlpha[k * curBatchSize + v])));
-      if (k < states - 1) { // TODO: just extend B and alphaC?
-        term = ADD(term, MULT(B_k, LOAD(&alphaC[(k + 1) * curBatchSize + v])));
-      }
-      FLOAT currentEmission_k =
-          ADD(ADD(em1Prob_k, MULT(em0minus1Prob_k, LOAD(&obsIsZeroBatch[pos * curBatchSize + v]))),
-              MULT(em2minus0Prob_k, LOAD(&obsIsTwoBatch[pos * curBatchSize + v])));
-      if (v == 0) {
-      }
-      STORE(&nextAlpha[k * curBatchSize + v], MULT(currentEmission_k, term));
-    }
-#endif
-  }
+  asmc::updateAlphaForwardStep(nextAlpha, previousAlpha, alphaC, AU, B, U, D, m_decodingQuant.columnRatios,
+                             emission1AtSite, emission0minus1AtSite, emission2minus0AtSite, obsIsZeroBatch,
+                             obsIsTwoBatch, curBatchSize, states, pos);
 }
 
 // backward step
@@ -979,92 +863,17 @@ void HMM::getPreviousBetaBatched(float recDistFromPrevious, int curBatchSize, Ei
   const vector<float>& U = m_decodingQuant.Uvectors.at(recDistFromPrevious);
   const vector<float>& RR = m_decodingQuant.rowRatioVectors.at(recDistFromPrevious);
   const vector<float>& D = m_decodingQuant.Dvectors.at(recDistFromPrevious);
-#ifdef NO_SSE
 
-  for (int k = 0; k < states; k++) {
-    for (int v = 0; v < curBatchSize; v++) {
-      float currentEmission_k = emission1AtSite[k] +
-                                emission0minus1AtSite[k] * obsIsZeroBatch[(pos + 1) * curBatchSize + v] +
-                                emission2minus0AtSite[k] * obsIsTwoBatch[(pos + 1) * curBatchSize + v];
-      vec[k * curBatchSize + v] = lastComputedBeta[k * curBatchSize + v] * currentEmission_k;
-    }
-  }
-
-#else
-  for (int k = 0; k < states; k++) {
-#ifdef AVX512
-    FLOAT em1Prob_k = LOAD1(emission1AtSite[k]);
-    FLOAT em0minus1Prob_k = LOAD1(emission0minus1AtSite[k]);
-    FLOAT em2minus0Prob_k = LOAD1(emission2minus0AtSite[k]);
-#else
-    FLOAT em1Prob_k = LOAD1(&emission1AtSite[k]);
-    FLOAT em0minus1Prob_k = LOAD1(&emission0minus1AtSite[k]);
-    FLOAT em2minus0Prob_k = LOAD1(&emission2minus0AtSite[k]);
-#endif
-    for (int v = 0; v < curBatchSize; v += VECX) {
-      FLOAT currentEmission_k =
-          ADD(ADD(em1Prob_k, MULT(em0minus1Prob_k, LOAD(&obsIsZeroBatch[(pos + 1) * curBatchSize + v]))),
-              MULT(em2minus0Prob_k, LOAD(&obsIsTwoBatch[(pos + 1) * curBatchSize + v])));
-      STORE(&vec[k * curBatchSize + v], MULT(LOAD(&lastComputedBeta[k * curBatchSize + v]), currentEmission_k));
-    }
-  }
-#endif
+  asmc::computeBetaEmissionProduct(vec, lastComputedBeta, obsIsZeroBatch, obsIsTwoBatch, emission1AtSite,
+                                   emission0minus1AtSite, emission2minus0AtSite, curBatchSize, states, pos);
 
   BU.setZero();
-#ifdef NO_SSE
-  for (int k = states - 2; k >= 0; k--)
-    for (int v = 0; v < curBatchSize; v++)
-      BU[k * curBatchSize + v] = U[k] * vec[(k + 1) * curBatchSize + v] + RR[k] * BU[(k + 1) * curBatchSize + v];
-#else
-  for (int k = states - 2; k >= 0; k--) {
-#ifdef AVX512
-    FLOAT U_k = LOAD1(U[k]);
-    FLOAT RR_k = LOAD1(RR[k]);
-#else
-    FLOAT U_k = LOAD1(&U[k]);
-    FLOAT RR_k = LOAD1(&RR[k]);
-#endif
-    for (int v = 0; v < curBatchSize; v += VECX) {
-      FLOAT term1 = MULT(U_k, LOAD(&vec[(k + 1) * curBatchSize + v]));
-      FLOAT term2 = MULT(RR_k, LOAD(&BU[(k + 1) * curBatchSize + v]));
-      STORE(&BU[k * curBatchSize + v], ADD(term1, term2));
-    }
-  }
-#endif
+
+  asmc::computeBetaUpwardSweep(BU, vec, U, RR, curBatchSize, states);
 
   BL.setZero();
-#ifdef NO_SSE
-  for (int k = 0; k < states; k++) {
-    for (int v = 0; v < curBatchSize; v++) {
-      if (k)
-        BL[v] += B[k - 1] * vec[(k - 1) * curBatchSize + v];
-      currentBeta[k * curBatchSize + v] = BL[v] + D[k] * vec[k * curBatchSize + v] + BU[k * curBatchSize + v];
-    }
-  }
-#else
-  for (int k = 0; k < states; k++) {
-#ifdef AVX512
-    FLOAT D_k = LOAD1(D[k]);
-    FLOAT B_km1;
-    if (k)
-      B_km1 = LOAD1(B[k - 1]);
-#else
-    FLOAT D_k = LOAD1(&D[k]);
-    FLOAT B_km1;
-    if (k)
-      B_km1 = LOAD1(&B[k - 1]);
-#endif
-    for (int v = 0; v < curBatchSize; v += VECX) {
-      FLOAT BL_v = LOAD(&BL[v]);
-      if (k) {
-        BL_v = ADD(BL_v, MULT(B_km1, LOAD(&vec[(k - 1) * curBatchSize + v])));
-        STORE(&BL[v], BL_v);
-      }
-      STORE(&currentBeta[k * curBatchSize + v],
-            ADD(BL_v, ADD(MULT(D_k, LOAD(&vec[k * curBatchSize + v])), LOAD(&BU[k * curBatchSize + v]))));
-    }
-  }
-#endif
+
+  asmc::computeBetaFinalCombine(currentBeta, BL, BU, vec, B, D, curBatchSize, states);
 }
 
 // --posteriorSums

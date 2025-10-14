@@ -18,14 +18,18 @@
 
 #include "ASMC.hpp"
 #include "FileUtils.hpp"
+#include "Simd.hpp"
 
 #include <Eigen/Core>
-#include <fmt/format.h>
 
 #include <sstream>
 
 TEST_CASE("test ASMC regression", "[HMM_regression]")
 {
+  // This test is designed to work with AVX2. It may work with other SIMD instruction sets, but it is possible that
+  // the test could fail with minor numerical differences.
+  asmc::warnIfSimdMismatch("AVX2");
+
   // we only needed to set doPosteriorSums to true, but because C++ does
   // not have keyword arguments we need to go through everything
   DecodingParams params(ASMC_DATA_DIR "/examples/asmc/exampleFile.n300.array",

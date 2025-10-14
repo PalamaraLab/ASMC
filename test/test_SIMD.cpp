@@ -13,25 +13,31 @@
 //    You should have received a copy of the GNU General Public License
 //    along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
+#include "catch.hpp"
 
-#include <cstdlib>
-#include <iostream>
+#include "Simd.hpp"
 
-#include "MemoryUtils.hpp"
-#include "Types.hpp"
+TEST_CASE("Print runtime SIMD information", "[SIMD]")
+{
+  asmc::printRuntimeSimdInfo();
+}
 
-void *ALIGNED_MALLOC(size_t size) {
-#ifdef USE_MKL_MALLOC
-  void *p = mkl_malloc(size, MEM_ALIGNMENT);
+TEST_CASE("Check batchsize validation", "[SIMD]")
+{
+  const int numSimdLanes = asmc::getNumSimdLanes();
+
+#ifdef ASMC_SIMD_DISABLED
+  REQUIRE(numSimdLanes == 1);
 #else
-  void *p = _mm_malloc(size, MEM_ALIGNMENT);
+  REQUIRE(numSimdLanes > 1);
 #endif
-  if (p == NULL) {
-    std::cerr << "ERROR: Failed to allocate " << size << " bytes" << std::endl;
-    exit(1);
-  } else if ((uint64) p & 0xf) {
-    std::cerr << "ERROR: Memory alignment of " << size << " bytes failed" << std::endl;
-    exit(1);
+
+  const int compositeBatchSize = 2 * numSimdLanes;
+  const int nonCompositeBatchSize = compositeBatchSize + 1;
+
+  REQUIRE_NOTHROW(asmc::validateBatchSize(compositeBatchSize));
+
+  if (numSimdLanes > 1) {
+    REQUIRE_THROWS_AS(asmc::validateBatchSize(nonCompositeBatchSize), std::runtime_error);
   }
-  return p;
 }

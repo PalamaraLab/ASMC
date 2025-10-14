@@ -14,20 +14,20 @@
 # along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
 
-from asmc.asmc_python_bindings import BinaryDataReader
-from asmc.asmc_python_bindings import DecodingModeOverall
-from asmc.asmc_python_bindings import DecodingMode
-from asmc.asmc_python_bindings import DecodingReturnValues
-from asmc.asmc_python_bindings import DecodePairsReturnStruct
-from asmc.asmc_python_bindings import IbdPairDataLine
-from asmc.asmc_python_bindings import Individual
-from asmc.asmc_python_bindings import PairObservations
-from asmc.asmc_python_bindings import DecodingQuantities
-from asmc.asmc_python_bindings import DecodingParams
-from asmc.asmc_python_bindings import Data
-from asmc.asmc_python_bindings import HMM
-from asmc.asmc_python_bindings import FastSMC
-from asmc.asmc_python_bindings import ASMC
+from .asmc_python_bindings import BinaryDataReader
+from .asmc_python_bindings import DecodingModeOverall
+from .asmc_python_bindings import DecodingMode
+from .asmc_python_bindings import DecodingReturnValues
+from .asmc_python_bindings import DecodePairsReturnStruct
+from .asmc_python_bindings import IbdPairDataLine
+from .asmc_python_bindings import Individual
+from .asmc_python_bindings import PairObservations
+from .asmc_python_bindings import DecodingQuantities
+from .asmc_python_bindings import DecodingParams
+from .asmc_python_bindings import Data
+from .asmc_python_bindings import HMM
+from .asmc_python_bindings import FastSMC
+from .asmc_python_bindings import ASMC
 
 
 #
