@@ -58,8 +58,7 @@ jobs:
         working-directory: build_dir
 
       - name: upload coverage to codecov
-        run: |
-          curl -Os https://uploader.codecov.io/latest/linux/codecov
-          chmod +x codecov
-          ./codecov
-        working-directory: build_dir
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          directory: build_dir
