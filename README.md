@@ -59,7 +59,7 @@ This should not have a substantial impact on most downstream analyses.
 
 ## For developers: making a release
 
-- Bump the version number in [pyproject.toml]([pyproject.toml]), [CMakeLists.txt](CMakeLists.txt) and [conf.py](docs/conf.py)
+- Bump the version number in [pyproject.toml](pyproject.toml), [CMakeLists.txt](CMakeLists.txt) and [conf.py](docs/conf.py)
 - Update [RELEASE_NOTES.md](RELEASE_NOTES.md)
 - Push changes and check that all [GitHub workflows](https://github.com/PalamaraLab/ASMC/actions) pass
 - Tag the commit in Git using syntax `vX.Y`

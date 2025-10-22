@@ -4,7 +4,7 @@
 cmake_minimum_required(VERSION 3.15)
 message(STATUS "CMake version: ${CMAKE_VERSION}")
 
-project(asmc LANGUAGES CXX VERSION 1.3.1)
+project(asmc LANGUAGES CXX VERSION 1.4.0)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
 

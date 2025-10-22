@@ -1,5 +1,17 @@
 # ASMC Release Notes
 
+## v1.4.0 (2025-10-22)
+
+### Breaking changes
+
+- Dependencies are no longer managed with vcpkg. Boost and zlib should now be obtained from a system package manager, while other dependencies are fetched using CMake's FetchContent during configuration.
+
+### Other changes
+
+- Added support for cross-platform SIMD vectorization using the Google Highway library. This improves performance by dynamically dispatching to the most powerful supported instruction set at runtime (e.g., AVX-512, AVX2, or NEON), ensuring optimal performance on different CPU architectures.
+
+- Python wheels are now available for Linux and macOS on both x86_64 and arm64/AArch64 architectures, for CPython versions 3.9 to 3.14 inclusive.
+
 ## v1.3.1 (2023-06-30)
 
 ### Breaking changes
