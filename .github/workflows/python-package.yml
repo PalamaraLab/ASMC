@@ -39,29 +39,15 @@ jobs:
             arch: x86_64
             py-vers-full: cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*
             py-vers-pr: cp313-*
-            before-all: MACOSX_DEPLOYMENT_TARGET=11 brew install --build-from-source boost zlib
-            extra-env: >
-              CC=clang
-              CXX=clang++
-              MACOSX_DEPLOYMENT_TARGET=11
-              SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
-              CFLAGS="-mmacosx-version-min=11"
-              CXXFLAGS="-mmacosx-version-min=11"
-              LDFLAGS="-mmacosx-version-min=11"
-            mdt: 11
-          - os: macos-15
+            before-all: brew install boost zlib
+            extra-env: CC=clang CXX=clang++
+            mdt: 15
+          - os: macos-14
             arch: arm64
             py-vers-full: cp39-* cp310-* cp311-* cp312-* cp313-* cp314-*
             py-vers-pr: cp314-*
-            before-all: MACOSX_DEPLOYMENT_TARGET=11 brew install --build-from-source boost zlib
-            extra-env: >
-              CC=clang
-              CXX=clang++
-              MACOSX_DEPLOYMENT_TARGET=11
-              SDKROOT=$(xcrun --sdk macosx --show-sdk-path)
-              CFLAGS="-mmacosx-version-min=11"
-              CXXFLAGS="-mmacosx-version-min=11"
-              LDFLAGS="-mmacosx-version-min=11"
+            before-all: brew install boost zlib
+            extra-env: CC=clang CXX=clang++
             mdt: 11
 
     env:
