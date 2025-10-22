@@ -18,9 +18,9 @@
 # -- Project information -----------------------------------------------------
 
 project = 'ASMC'
-copyright = '2023, ASMC Developers'
+copyright = '2025, ASMC Developers'
 author = 'ASMC Developers, https://palamaralab.github.io/software/asmc/'
-release = 'v1.3.1'
+release = 'v1.4.0'
 
 # -- General configuration ---------------------------------------------------
 
