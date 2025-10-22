@@ -48,7 +48,7 @@ jobs:
             py-vers-pr: cp314-*
             before-all: brew install boost zlib
             extra-env: CC=clang CXX=clang++
-            mdt: 11
+            mdt: 14
 
     env:
       CIBW_BUILD: ${{ github.event_name != 'pull_request' && matrix.py-vers-full || matrix.py-vers-pr }}
