@@ -245,6 +245,12 @@ public:
   void decodeHapPairs(const std::vector<unsigned long>& individualsA, const std::vector<unsigned long>& individualsB,
                       unsigned from = 0u, unsigned to = 0u, float cmBurnIn = 0.5f);
 
+  /// Parallel version: splits pairs across threads, each with independent buffers.
+  /// Requires OpenMP. Falls back to sequential if nThreads <= 1 or OpenMP unavailable.
+  void decodeHapPairsParallel(const std::vector<unsigned long>& individualsA,
+                              const std::vector<unsigned long>& individualsB,
+                              unsigned from, unsigned to, float cmBurnIn, int nThreads);
+
   /// decode a single pair over a segment of the genome
   ///
   /// i and j must be a valid index in `individuals`, `fromPosition` and `toPosition`

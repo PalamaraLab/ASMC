@@ -201,6 +201,26 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(fmt)
 target_link_libraries(ASMC PRIVATE fmt::fmt)
 
+# OpenMP for parallel pair decoding
+if(APPLE)
+    # Apple Clang needs explicit paths to Homebrew libomp
+    execute_process(COMMAND brew --prefix libomp OUTPUT_VARIABLE LIBOMP_PREFIX OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(EXISTS "${LIBOMP_PREFIX}")
+        set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include" CACHE STRING "" FORCE)
+        set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include" CACHE STRING "" FORCE)
+        set(OpenMP_C_LIB_NAMES "omp" CACHE STRING "" FORCE)
+        set(OpenMP_CXX_LIB_NAMES "omp" CACHE STRING "" FORCE)
+        set(OpenMP_omp_LIBRARY "${LIBOMP_PREFIX}/lib/libomp.dylib" CACHE FILEPATH "" FORCE)
+    endif()
+endif()
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(ASMC PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "OpenMP found - parallel pair decoding enabled")
+else()
+    message(STATUS "OpenMP not found - parallel pair decoding will fall back to sequential")
+endif()
+
 # Fetch range-v3
 set(RANGE_V3_TESTS OFF CACHE BOOL "Disable range-v3 tests")
 FetchContent_Declare(

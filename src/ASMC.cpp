@@ -152,6 +152,23 @@ void ASMC::ASMC::decodePairs(const std::vector<unsigned long>& hapIndicesA,
   mHmm.getDecodePairsReturnStruct().finaliseCalculations();
 }
 
+void ASMC::ASMC::decodePairsParallel(const std::vector<unsigned long>& hapIndicesA,
+                                     const std::vector<unsigned long>& hapIndicesB,
+                                     const unsigned from, const unsigned to, const float cmBurnIn, int nThreads)
+{
+  if (hapIndicesA.empty() || hapIndicesA.size() != hapIndicesB.size()) {
+    throw std::runtime_error(
+        fmt::format("Vector of A indices ({}) must be the same size as vector of B indices ({}).\n", hapIndicesA.size(),
+                    hapIndicesB.size()));
+  }
+  const long int seqLen = to > from ? to - from : mData.sites;
+  mHmm.getDecodePairsReturnStruct().initialise(
+      hapIndicesA, hapIndicesB, seqLen, mHmm.getDecodingQuantities().states, mHmm.getStorePerPairPosterior(),
+      mHmm.getStoreSumOfPosterior(), mHmm.getStorePerPairPosteriorMean(), mHmm.getStorePerPairMap());
+  mHmm.decodeHapPairsParallel(hapIndicesA, hapIndicesB, from, to, cmBurnIn, nThreads);
+  mHmm.getDecodePairsReturnStruct().finaliseCalculations();
+}
+
 void ASMC::ASMC::decodePairs(const std::vector<std::string>& hapIdsA, const std::vector<std::string>& hapIdsB,
                              const unsigned from, const unsigned to, const float cmBurnIn)
 {

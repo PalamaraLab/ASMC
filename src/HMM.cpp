@@ -29,6 +29,10 @@
 
 #include <fmt/format.h>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 #include "HmmUtils.hpp"
 #include "Simd.hpp"
 #include "StringUtils.hpp"
@@ -506,6 +510,303 @@ void HMM::decodeHapPairs(const std::vector<unsigned long>& hapsA, const std::vec
   }
 }
 
+void HMM::decodeHapPairsParallel(const std::vector<unsigned long>& hapsA, const std::vector<unsigned long>& hapsB,
+                                  const unsigned from, unsigned to, const float cmBurnIn, int nThreads)
+{
+#ifndef _OPENMP
+  // Fall back to sequential if OpenMP not available
+  decodeHapPairs(hapsA, hapsB, from, to, cmBurnIn);
+  finishDecoding();
+  return;
+#else
+  if (nThreads <= 1) {
+    decodeHapPairs(hapsA, hapsB, from, to, cmBurnIn);
+    finishDecoding();
+    return;
+  }
+
+  const unsigned seqLength = static_cast<unsigned>(data.sites);
+  if (to == 0u) to = seqLength;
+  if (from >= to || to > seqLength) {
+    throw std::runtime_error(
+      fmt::format("Require 0 <= from < to <= sequenceLength but got {} < {} <= {}\n", from, to, seqLength));
+  }
+
+  std::fill(fromBatch.begin(), fromBatch.end(), from);
+  std::fill(toBatch.begin(), toBatch.end(), to);
+  mCmBurnIn = cmBurnIn;
+  updateOutputStructures();
+
+  const size_t numPairs = hapsA.size();
+
+  // Pre-compute all PairObservations
+  std::vector<PairObservations> allObs(numPairs);
+  for (size_t i = 0; i < numPairs; ++i) {
+    auto [iInd, iHap] = asmc::hapToDipId(hapsA[i]);
+    auto [jInd, jHap] = asmc::hapToDipId(hapsB[i]);
+    allObs[i] = makePairObs(static_cast<int_least8_t>(iHap), iInd,
+                            static_cast<int_least8_t>(jHap), jInd);
+  }
+
+  // Compute burn-in adjusted from/to
+  unsigned adjFrom = asmc::getFromPosition(data.geneticPositions, from, mCmBurnIn);
+  unsigned adjTo = asmc::getToPosition(data.geneticPositions, to, mCmBurnIn);
+
+  // Make bits for all observations
+  if (adjFrom > 0u || adjTo < seqLength) {
+    for (auto& obs : allObs) {
+      makeBits(obs, adjFrom, adjTo);
+    }
+  }
+
+  // Group into SIMD batches
+  const int batchSz = m_batchSize;
+  std::vector<std::vector<PairObservations>> batches;
+  std::vector<std::vector<size_t>> batchPairIndices; // original pair index for output
+
+  for (size_t i = 0; i < numPairs; i += batchSz) {
+    size_t end = std::min(i + static_cast<size_t>(batchSz), numPairs);
+    std::vector<PairObservations> batch(allObs.begin() + i, allObs.begin() + end);
+    std::vector<size_t> indices;
+    for (size_t j = i; j < end; j++) indices.push_back(j);
+
+    size_t actualSize = batch.size();
+    // Pad to SIMD lane multiple
+    while (batch.size() % asmc::getNumSimdLanes() != 0) {
+      batch.push_back(batch.back());
+    }
+
+    batches.push_back(std::move(batch));
+    batchPairIndices.push_back(std::move(indices));
+  }
+
+  const size_t numBatches = batches.size();
+  const long int seqFrom = static_cast<long int>(from);
+  const long int seqTo = static_cast<long int>(to);
+  const unsigned seqLen = to - from;
+
+  // Per-batch output storage
+  struct BatchResult {
+    Eigen::Array<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> posteriorMeans;
+    Eigen::Array<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> maps;
+    size_t actualSize;
+  };
+  std::vector<BatchResult> batchResults(numBatches);
+
+  omp_set_num_threads(nThreads);
+
+  #pragma omp parallel
+  {
+    // Thread-local buffers
+    Eigen::ArrayXf localAlpha(seqLength * states * batchSz);
+    Eigen::ArrayXf localBeta(seqLength * states * batchSz);
+    Eigen::ArrayXf localScaling(batchSz);
+    Eigen::ArrayXf localAllZeros(seqLength * batchSz);
+    localAllZeros.setZero();
+
+    Eigen::Array<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> localMeanPost;
+    Eigen::Array<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> localMAP;
+    Eigen::ArrayXf localMAPValue;
+
+    if (m_calculatePerPairPosteriorMean) {
+      localMeanPost.resize(batchSz, seqLen);
+    }
+    if (m_calculatePerPairMAP) {
+      localMAP.resize(batchSz, seqLen);
+      localMAPValue.resize(batchSz);
+    }
+
+    #pragma omp for schedule(dynamic)
+    for (size_t bIdx = 0; bIdx < numBatches; ++bIdx) {
+      auto& batch = batches[bIdx];
+      int curBatchSize = static_cast<int>(batch.size());
+      size_t actualSize = batchPairIndices[bIdx].size();
+
+      // Build observation bit arrays
+      Eigen::ArrayXf obsIsZero(seqLength * curBatchSize);
+      Eigen::ArrayXf obsIsTwo(seqLength * curBatchSize);
+
+      for (long int pos = adjFrom; pos < adjTo; pos++) {
+        for (int v = 0; v < curBatchSize; v++) {
+          obsIsZero[pos * curBatchSize + v] = (!batch[v].obsBits[pos - adjFrom] ? 1.0f : 0.0f);
+          obsIsTwo[pos * curBatchSize + v] = (batch[v].homMinorBits[pos - adjFrom] ? 1.0f : 0.0f);
+        }
+      }
+
+      // Forward pass (using thread-local alpha buffer)
+      // Initialize pos=adjFrom
+      for (int k = 0; k < states; k++) {
+        for (int v = 0; v < curBatchSize; v++) {
+          float firstEmission = emission1AtSite[adjFrom][k] +
+                                emission0minus1AtSite[adjFrom][k] * obsIsZero[adjFrom * curBatchSize + v] +
+                                emission2minus0AtSite[adjFrom][k] * obsIsTwo[adjFrom * curBatchSize + v];
+          localAlpha[(states * adjFrom + k) * curBatchSize + v] = m_decodingQuant.initialStateProb[k] * firstEmission;
+        }
+      }
+
+      {
+        Eigen::Map<Eigen::ArrayXf> currentAlpha(&localAlpha[states * adjFrom * curBatchSize], states * curBatchSize);
+        Eigen::ArrayXf sums(curBatchSize);
+        asmc::calculateScalingBatch(currentAlpha, localScaling, sums, curBatchSize, states);
+        asmc::applyScalingBatch(currentAlpha, localScaling, curBatchSize, states);
+      }
+
+      // Forward induction
+      {
+        Eigen::ArrayXf alphaC(states * curBatchSize);
+        Eigen::ArrayXf AU(curBatchSize);
+        Eigen::ArrayXf sums(curBatchSize);
+
+        float lastGeneticPos = data.geneticPositions[adjFrom];
+        int lastPhysicalPos = data.physicalPositions[adjFrom];
+
+        for (long int pos = adjFrom + 1; pos < adjTo; pos++) {
+          float recDist = asmc::roundMorgans(data.geneticPositions[pos] - lastGeneticPos, precision, minGenetic);
+          Eigen::Map<Eigen::ArrayXf> prevAlpha(&localAlpha[(pos - 1) * states * curBatchSize], states * curBatchSize);
+          Eigen::Map<Eigen::ArrayXf> nextAlpha(&localAlpha[pos * states * curBatchSize], states * curBatchSize);
+
+          if (decodingParams.decodingSequence) {
+            float currentRecRate = asmc::roundMorgans(data.recRateAtMarker[pos], precision, minGenetic);
+            int physDist = asmc::roundPhysical(data.physicalPositions[pos] - lastPhysicalPos - 1, precision);
+            float recDistM1 = asmc::roundMorgans(recDist - currentRecRate, precision, minGenetic);
+            auto homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDist);
+            getNextAlphaBatched(recDistM1, alphaC, curBatchSize, prevAlpha, pos, localAllZeros, localAllZeros,
+                                AU, nextAlpha, homozEmission, homozEmission, homozEmission);
+            prevAlpha = nextAlpha;
+            getNextAlphaBatched(currentRecRate, alphaC, curBatchSize, prevAlpha, pos, obsIsZero, obsIsTwo, AU,
+                                nextAlpha, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
+          } else {
+            getNextAlphaBatched(recDist, alphaC, curBatchSize, prevAlpha, pos, obsIsZero, obsIsTwo,
+                                AU, nextAlpha, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
+          }
+
+          if (pos % scalingSkip == 0) {
+            asmc::calculateScalingBatch(nextAlpha, localScaling, sums, curBatchSize, states);
+            asmc::applyScalingBatch(nextAlpha, localScaling, curBatchSize, states);
+          }
+          lastGeneticPos = data.geneticPositions[pos];
+          lastPhysicalPos = data.physicalPositions[pos];
+        }
+      }
+
+      // Backward pass (using thread-local beta buffer)
+      {
+        for (int k = 0; k < states; k++) {
+          for (int v = 0; v < curBatchSize; v++) {
+            localBeta[((adjTo - 1) * states + k) * curBatchSize + v] = 1.0f;
+          }
+        }
+
+        Eigen::ArrayXf betaC(states * curBatchSize);
+        Eigen::ArrayXf BU(states * curBatchSize);
+        Eigen::ArrayXf BL(curBatchSize);
+        Eigen::ArrayXf vec(states * curBatchSize);
+        Eigen::ArrayXf sums(curBatchSize);
+
+        float lastGeneticPos = data.geneticPositions[adjTo - 1];
+        int lastPhysicalPos = data.physicalPositions[adjTo - 1];
+
+        for (long int pos = adjTo - 2; pos >= static_cast<long int>(adjFrom); pos--) {
+          float recDist = asmc::roundMorgans(lastGeneticPos - data.geneticPositions[pos], precision, minGenetic);
+          Eigen::Map<Eigen::ArrayXf> lastBeta(&localBeta[(pos + 1) * states * curBatchSize], states * curBatchSize);
+          Eigen::Map<Eigen::ArrayXf> currentBeta(&localBeta[pos * states * curBatchSize], states * curBatchSize);
+
+          if (decodingParams.decodingSequence) {
+            float currentRecRate = asmc::roundMorgans(data.recRateAtMarker[pos + 1], precision, minGenetic);
+            int physDist = asmc::roundPhysical(lastPhysicalPos - data.physicalPositions[pos] - 1, precision);
+            float recDistM1 = asmc::roundMorgans(recDist - currentRecRate, precision, minGenetic);
+            auto homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDist);
+            getPreviousBetaBatched(currentRecRate, curBatchSize, lastBeta, pos, obsIsZero, obsIsTwo,
+                                   vec, BU, BL, currentBeta, emission1AtSite[pos + 1],
+                                   emission0minus1AtSite[pos + 1], emission2minus0AtSite[pos + 1]);
+            lastBeta = currentBeta;
+            getPreviousBetaBatched(recDistM1, curBatchSize, lastBeta, pos, localAllZeros, localAllZeros,
+                                   vec, BU, BL, currentBeta, homozEmission, homozEmission, homozEmission);
+          } else {
+            getPreviousBetaBatched(recDist, curBatchSize, lastBeta, pos, obsIsZero, obsIsTwo,
+                                   vec, BU, BL, currentBeta, emission1AtSite[pos + 1],
+                                   emission0minus1AtSite[pos + 1], emission2minus0AtSite[pos + 1]);
+          }
+
+          if (pos % scalingSkip == 0) {
+            asmc::calculateScalingBatch(currentBeta, localScaling, sums, curBatchSize, states);
+            asmc::applyScalingBatch(currentBeta, localScaling, curBatchSize, states);
+          }
+          lastGeneticPos = data.geneticPositions[pos];
+          lastPhysicalPos = data.physicalPositions[pos];
+        }
+      }
+
+      // Combine alpha * beta, normalize
+      {
+        Eigen::Map<Eigen::ArrayXf> scale(obsIsZero.data(), obsIsZero.size());
+        asmc::normalizeAlphaWithBeta(localAlpha, localBeta, scale, curBatchSize, states, adjFrom, adjTo);
+      }
+
+      // Extract posterior means and MAPs
+      BatchResult result;
+      result.actualSize = actualSize;
+
+      if (m_calculatePerPairPosteriorMean) {
+        localMeanPost.setZero();
+        for (long int pos = seqFrom; pos < seqTo; pos++) {
+          long int offset = pos - seqFrom;
+          for (int k = 0; k < states; k++) {
+            for (int v = 0; v < static_cast<int>(actualSize); v++) {
+              localMeanPost(v, offset) += localAlpha[(pos * states + k) * curBatchSize + v] * expectedCoalTimes[k];
+            }
+          }
+        }
+        result.posteriorMeans = localMeanPost.topRows(actualSize);
+      }
+
+      if (m_calculatePerPairMAP) {
+        localMAP.setZero();
+        for (long int pos = seqFrom; pos < seqTo; pos++) {
+          long int offset = pos - seqFrom;
+          localMAPValue.setZero();
+          for (int k = 0; k < states; k++) {
+            for (int v = 0; v < static_cast<int>(actualSize); v++) {
+              float val = localAlpha[(pos * states + k) * curBatchSize + v];
+              if (localMAPValue[v] < val) {
+                localMAP(v, offset) = k;
+                localMAPValue[v] = val;
+              }
+            }
+          }
+        }
+        result.maps = localMAP.topRows(actualSize);
+      }
+
+      batchResults[bIdx] = std::move(result);
+    }
+  } // end omp parallel
+
+  // Merge results into m_decodePairsReturnStruct (sequential)
+  for (size_t bIdx = 0; bIdx < numBatches; ++bIdx) {
+    auto& result = batchResults[bIdx];
+    auto& indices = batchPairIndices[bIdx];
+
+    for (size_t k = 0; k < indices.size(); ++k) {
+      auto outIdx = static_cast<Eigen::Index>(indices[k]);
+
+      unsigned long hapA = asmc::dipToHapId(allObs[indices[k]].iInd, allObs[indices[k]].iHap);
+      unsigned long hapB = asmc::dipToHapId(allObs[indices[k]].jInd, allObs[indices[k]].jHap);
+      std::string indIdA = asmc::indPlusHapToCombinedId(data.IIDList.at(allObs[indices[k]].iInd), allObs[indices[k]].iHap);
+      std::string indIdB = asmc::indPlusHapToCombinedId(data.IIDList.at(allObs[indices[k]].jInd), allObs[indices[k]].jHap);
+      m_decodePairsReturnStruct.perPairIndices.at(outIdx) = std::make_tuple(hapA, indIdA, hapB, indIdB);
+
+      if (m_storePerPairPosteriorMean) {
+        m_decodePairsReturnStruct.perPairPosteriorMeans.row(outIdx) = result.posteriorMeans.row(k);
+      }
+      if (m_storePerPairMAP) {
+        m_decodePairsReturnStruct.perPairMAPs.row(outIdx) = result.maps.row(k);
+      }
+    }
+  }
+#endif
+}
+
 void HMM::decodeFromHashing(const uint indivID1, const uint indivID2, const uint fromPosition, const uint toPosition)
 {
   const vector<Individual>& individuals = data.individuals;
@@ -764,6 +1065,7 @@ void HMM::forwardBatch(Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch, Eigen::Ref<Eig
     lastGeneticPos = data.geneticPositions[pos];
     lastPhysicalPos = data.physicalPositions[pos];
   }
+
 }
 
 // compute next alpha vector in linear time
@@ -855,6 +1157,7 @@ void HMM::backwardBatch(Eigen::ArrayXf obsIsZeroBatch, Eigen::ArrayXf obsIsTwoBa
     lastGeneticPos = data.geneticPositions[pos];
     lastPhysicalPos = data.physicalPositions[pos];
   }
+
 }
 
 // compute previous beta vector in linear time
