@@ -54,6 +54,14 @@ public:
   ASMC(const std::string& inFileRoot, const std::string& decodingQuantFile, const std::string& outFileRoot = "",
        const std::string& decodingMode = "array");
 
+  /**
+   * ASMC constructor from a pre-built Data object, bypassing file I/O.
+   *
+   * @param params the decoding parameters (only decodingQuantFile and flags are used)
+   * @param data the pre-built Data object
+   */
+  ASMC(DecodingParams params, Data data);
+
   DecodingParams getDecodingParams();
 
   unsigned long getDiploidSampleSize();

@@ -230,6 +230,72 @@ PYBIND11_MODULE(asmc_python_bindings, m)
       .def(py::init<DecodingParams>(), "decodingParams"_a)
       .def(py::init<const std::string&, const std::string&, const std::string&, const std::string&>(), "in_dir"_a,
            "dq_file"_a, "out_dir"_a = "", "decoding_mode"_a = "array")
+      .def_static("from_arrays", [](
+            py::array_t<int8_t, py::array::c_style | py::array::forcecast> genotypes,
+            py::array_t<int, py::array::c_style | py::array::forcecast> physical_positions,
+            py::array_t<float, py::array::c_style | py::array::forcecast> genetic_positions,
+            const std::string& dq_file,
+            bool use_ancestral,
+            float skip_csfs_distance,
+            const std::string& decoding_mode
+          ) -> std::unique_ptr<ASMC::ASMC> {
+            auto geno = genotypes.unchecked<2>();
+            int num_sites = static_cast<int>(geno.shape(0));
+            int num_haps = static_cast<int>(geno.shape(1));
+            unsigned long num_diploid = static_cast<unsigned long>(num_haps / 2);
+
+            auto phys = physical_positions.unchecked<1>();
+            auto gen = genetic_positions.unchecked<1>();
+
+            std::vector<int> physPos(num_sites);
+            std::vector<float> genPos(num_sites);
+            for (int i = 0; i < num_sites; i++) {
+              physPos[i] = phys(i);
+              genPos[i] = gen(i);
+            }
+
+            bool fold = !use_ancestral;
+            bool usingCSFS = (skip_csfs_distance != std::numeric_limits<float>::infinity());
+
+            Data data(num_sites, num_diploid, std::move(physPos), std::move(genPos),
+                      genotypes.data(), usingCSFS, fold);
+
+            bool isSequence = (decoding_mode == "sequence");
+
+            DecodingParams params;
+            params.decodingQuantFile = dq_file;
+            params.decodingModeString = decoding_mode;
+            params.decodingModeOverall = isSequence ? DecodingModeOverall::sequence : DecodingModeOverall::array;
+            if (isSequence) {
+              params.decodingMode = fold ? DecodingMode::sequenceFolded : DecodingMode::sequence;
+            } else {
+              params.decodingMode = fold ? DecodingMode::arrayFolded : DecodingMode::array;
+            }
+            params.decodingSequence = isSequence;
+            params.usingCSFS = usingCSFS;
+            params.compress = false;
+            params.useAncestral = use_ancestral;
+            params.skipCSFSdistance = skip_csfs_distance;
+            params.foldData = fold;
+            params.noBatches = false;
+            params.FastSMC = false;
+
+            return std::make_unique<ASMC::ASMC>(std::move(params), std::move(data));
+          },
+          "genotypes"_a, "physical_positions"_a, "genetic_positions"_a,
+          "dq_file"_a, "use_ancestral"_a = false, "skip_csfs_distance"_a = 0.f,
+          "decoding_mode"_a = "array",
+          R"doc(Construct ASMC from in-memory arrays, bypassing all file I/O.
+
+Args:
+    genotypes: int8 array of shape (num_sites, num_haps) with values 0/1
+    physical_positions: int array of physical positions (bp), length num_sites
+    genetic_positions: float array of genetic positions (Morgans), length num_sites
+    dq_file: path to decoding quantities file
+    use_ancestral: if False (default), fold data to minor allele
+    skip_csfs_distance: minimum genetic distance between CSFS sites (0 = use at all sites)
+    decoding_mode: "array" (default, for SNP array data) or "sequence" (for WGS data)
+)doc")
       .def("get_decoding_params", &ASMC::ASMC::getDecodingParams)
       .def("get_diploid_sample_size", &ASMC::ASMC::getDiploidSampleSize)
       .def("get_haploid_sample_size", &ASMC::ASMC::getHaploidSampleSize)

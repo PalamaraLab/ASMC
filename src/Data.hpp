@@ -16,6 +16,7 @@
 #ifndef ASMC_DATA_HPP
 #define ASMC_DATA_HPP
 
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -64,6 +65,23 @@ public:
    * @param params the decoding params
    */
   explicit Data(const DecodingParams& params);
+
+  /**
+   * Construct from in-memory arrays, bypassing all file I/O.
+   *
+   * @param numSites number of variant sites
+   * @param numDiploidSamples number of diploid individuals
+   * @param physPositions physical positions (bp), length numSites
+   * @param genPositions genetic positions (Morgans), length numSites
+   * @param haplotypes flat row-major genotype matrix (0/1), length numSites * 2*numDiploidSamples
+   * @param usingCSFS whether to use CSFS
+   * @param foldData whether to fold to minor allele
+   */
+  Data(int numSites, unsigned long numDiploidSamples,
+       std::vector<int> physPositions,
+       std::vector<float> genPositions,
+       const int8_t* haplotypes,
+       bool usingCSFS, bool foldData);
 
   /// Number of sites in the haplotypes file for `inFileRoot`, i.e. its non-blank lines.
   static int countHapLines(std::string inFileRoot);
