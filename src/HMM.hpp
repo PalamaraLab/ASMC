@@ -354,9 +354,23 @@ private:
   // decode a batch
   void decodeBatch(const std::vector<PairObservations>& obsBatch, unsigned from, unsigned to);
 
-  // forward step
+  // Forward pass: write alpha into alphaBuffer. Used by both sequential and parallel paths.
+  void forwardPassInto(Eigen::Ref<Eigen::ArrayXf> alphaBuffer, Eigen::Ref<Eigen::ArrayXf> scalingBuffer,
+                       const Eigen::ArrayXf& allZeros,
+                       Eigen::Ref<Eigen::ArrayXf> obsIsZero, Eigen::Ref<Eigen::ArrayXf> obsIsTwo,
+                       int curBatchSize, unsigned from, unsigned to);
+
+  // Backward pass: write beta into betaBuffer. Used by both sequential and parallel paths.
+  void backwardPassInto(Eigen::Ref<Eigen::ArrayXf> betaBuffer, Eigen::Ref<Eigen::ArrayXf> scalingBuffer,
+                        const Eigen::ArrayXf& allZeros,
+                        Eigen::Ref<Eigen::ArrayXf> obsIsZero, Eigen::Ref<Eigen::ArrayXf> obsIsTwo,
+                        int curBatchSize, unsigned from, unsigned to);
+
+  // Sequential wrappers using class-level buffers
   void forwardBatch(Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch, Eigen::Ref<Eigen::ArrayXf> obsIsTwoBatch,
                     int curBatchSize, unsigned from, unsigned to);
+  void backwardBatch(Eigen::ArrayXf obsIsZeroBatch, Eigen::ArrayXf obsIsTwoBatch, int curBatchSize, unsigned from,
+                     unsigned to);
 
   // compute next alpha vector in linear time
   void getNextAlphaBatched(float recDistFromPrevious, Eigen::Ref<Eigen::ArrayXf> alphaC, int curBatchSize,
@@ -365,9 +379,6 @@ private:
                            Eigen::Ref<Eigen::ArrayXf> AU, Eigen::Ref<Eigen::ArrayXf> nextAlpha,
                            const std::vector<float>& emission1AtSite, const std::vector<float>& emission0minus1AtSite,
                            const std::vector<float>& emission2minus0AtSite);
-  // backward step
-  void backwardBatch(Eigen::ArrayXf obsIsZeroBatch, Eigen::ArrayXf obsIsTwoBatch, int curBatchSize, unsigned from,
-                     unsigned to);
 
   // compute previous beta vector in linear time
   void getPreviousBetaBatched(float recDistFromPrevious, int curBatchSize, Eigen::Ref<Eigen::ArrayXf> lastComputedBeta,

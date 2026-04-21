@@ -633,109 +633,9 @@ void HMM::decodeHapPairsParallel(const std::vector<unsigned long>& hapsA, const 
         }
       }
 
-      // Forward pass (using thread-local alpha buffer)
-      // Initialize pos=adjFrom
-      for (int k = 0; k < states; k++) {
-        for (int v = 0; v < curBatchSize; v++) {
-          float firstEmission = emission1AtSite[adjFrom][k] +
-                                emission0minus1AtSite[adjFrom][k] * obsIsZero[adjFrom * curBatchSize + v] +
-                                emission2minus0AtSite[adjFrom][k] * obsIsTwo[adjFrom * curBatchSize + v];
-          localAlpha[(states * adjFrom + k) * curBatchSize + v] = m_decodingQuant.initialStateProb[k] * firstEmission;
-        }
-      }
-
-      {
-        Eigen::Map<Eigen::ArrayXf> currentAlpha(&localAlpha[states * adjFrom * curBatchSize], states * curBatchSize);
-        Eigen::ArrayXf sums(curBatchSize);
-        asmc::calculateScalingBatch(currentAlpha, localScaling, sums, curBatchSize, states);
-        asmc::applyScalingBatch(currentAlpha, localScaling, curBatchSize, states);
-      }
-
-      // Forward induction
-      {
-        Eigen::ArrayXf alphaC(states * curBatchSize);
-        Eigen::ArrayXf AU(curBatchSize);
-        Eigen::ArrayXf sums(curBatchSize);
-
-        float lastGeneticPos = data.geneticPositions[adjFrom];
-        int lastPhysicalPos = data.physicalPositions[adjFrom];
-
-        for (long int pos = adjFrom + 1; pos < adjTo; pos++) {
-          float recDist = asmc::roundMorgans(data.geneticPositions[pos] - lastGeneticPos, precision, minGenetic);
-          Eigen::Map<Eigen::ArrayXf> prevAlpha(&localAlpha[(pos - 1) * states * curBatchSize], states * curBatchSize);
-          Eigen::Map<Eigen::ArrayXf> nextAlpha(&localAlpha[pos * states * curBatchSize], states * curBatchSize);
-
-          if (decodingParams.decodingSequence) {
-            float currentRecRate = asmc::roundMorgans(data.recRateAtMarker[pos], precision, minGenetic);
-            int physDist = asmc::roundPhysical(data.physicalPositions[pos] - lastPhysicalPos - 1, precision);
-            float recDistM1 = asmc::roundMorgans(recDist - currentRecRate, precision, minGenetic);
-            auto homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDist);
-            getNextAlphaBatched(recDistM1, alphaC, curBatchSize, prevAlpha, pos, localAllZeros, localAllZeros,
-                                AU, nextAlpha, homozEmission, homozEmission, homozEmission);
-            prevAlpha = nextAlpha;
-            getNextAlphaBatched(currentRecRate, alphaC, curBatchSize, prevAlpha, pos, obsIsZero, obsIsTwo, AU,
-                                nextAlpha, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
-          } else {
-            getNextAlphaBatched(recDist, alphaC, curBatchSize, prevAlpha, pos, obsIsZero, obsIsTwo,
-                                AU, nextAlpha, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
-          }
-
-          if (pos % scalingSkip == 0) {
-            asmc::calculateScalingBatch(nextAlpha, localScaling, sums, curBatchSize, states);
-            asmc::applyScalingBatch(nextAlpha, localScaling, curBatchSize, states);
-          }
-          lastGeneticPos = data.geneticPositions[pos];
-          lastPhysicalPos = data.physicalPositions[pos];
-        }
-      }
-
-      // Backward pass (using thread-local beta buffer)
-      {
-        for (int k = 0; k < states; k++) {
-          for (int v = 0; v < curBatchSize; v++) {
-            localBeta[((adjTo - 1) * states + k) * curBatchSize + v] = 1.0f;
-          }
-        }
-
-        Eigen::ArrayXf betaC(states * curBatchSize);
-        Eigen::ArrayXf BU(states * curBatchSize);
-        Eigen::ArrayXf BL(curBatchSize);
-        Eigen::ArrayXf vec(states * curBatchSize);
-        Eigen::ArrayXf sums(curBatchSize);
-
-        float lastGeneticPos = data.geneticPositions[adjTo - 1];
-        int lastPhysicalPos = data.physicalPositions[adjTo - 1];
-
-        for (long int pos = adjTo - 2; pos >= static_cast<long int>(adjFrom); pos--) {
-          float recDist = asmc::roundMorgans(lastGeneticPos - data.geneticPositions[pos], precision, minGenetic);
-          Eigen::Map<Eigen::ArrayXf> lastBeta(&localBeta[(pos + 1) * states * curBatchSize], states * curBatchSize);
-          Eigen::Map<Eigen::ArrayXf> currentBeta(&localBeta[pos * states * curBatchSize], states * curBatchSize);
-
-          if (decodingParams.decodingSequence) {
-            float currentRecRate = asmc::roundMorgans(data.recRateAtMarker[pos + 1], precision, minGenetic);
-            int physDist = asmc::roundPhysical(lastPhysicalPos - data.physicalPositions[pos] - 1, precision);
-            float recDistM1 = asmc::roundMorgans(recDist - currentRecRate, precision, minGenetic);
-            auto homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDist);
-            getPreviousBetaBatched(currentRecRate, curBatchSize, lastBeta, pos, obsIsZero, obsIsTwo,
-                                   vec, BU, BL, currentBeta, emission1AtSite[pos + 1],
-                                   emission0minus1AtSite[pos + 1], emission2minus0AtSite[pos + 1]);
-            lastBeta = currentBeta;
-            getPreviousBetaBatched(recDistM1, curBatchSize, lastBeta, pos, localAllZeros, localAllZeros,
-                                   vec, BU, BL, currentBeta, homozEmission, homozEmission, homozEmission);
-          } else {
-            getPreviousBetaBatched(recDist, curBatchSize, lastBeta, pos, obsIsZero, obsIsTwo,
-                                   vec, BU, BL, currentBeta, emission1AtSite[pos + 1],
-                                   emission0minus1AtSite[pos + 1], emission2minus0AtSite[pos + 1]);
-          }
-
-          if (pos % scalingSkip == 0) {
-            asmc::calculateScalingBatch(currentBeta, localScaling, sums, curBatchSize, states);
-            asmc::applyScalingBatch(currentBeta, localScaling, curBatchSize, states);
-          }
-          lastGeneticPos = data.geneticPositions[pos];
-          lastPhysicalPos = data.physicalPositions[pos];
-        }
-      }
+      // Forward and backward using shared helper methods with thread-local buffers
+      forwardPassInto(localAlpha, localScaling, localAllZeros, obsIsZero, obsIsTwo, curBatchSize, adjFrom, adjTo);
+      backwardPassInto(localBeta, localScaling, localAllZeros, obsIsZero, obsIsTwo, curBatchSize, adjFrom, adjTo);
 
       // Combine alpha * beta, normalize
       {
@@ -1003,11 +903,13 @@ void HMM::decodeBatch(const vector<PairObservations>& obsBatch, const unsigned f
   ticksCombine += t3 - t2;
 }
 
-// forward step
-void HMM::forwardBatch(Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch, Eigen::Ref<Eigen::ArrayXf> obsIsTwoBatch,
-                       int curBatchSize, const unsigned from, const unsigned to)
+// Forward pass writing into caller-provided alpha buffer.
+// Thread-safe: only reads shared state (emission tables, decoding quantities).
+void HMM::forwardPassInto(Eigen::Ref<Eigen::ArrayXf> alphaBuffer, Eigen::Ref<Eigen::ArrayXf> scalingBuffer,
+                          const Eigen::ArrayXf& allZeros,
+                          Eigen::Ref<Eigen::ArrayXf> obsIsZero, Eigen::Ref<Eigen::ArrayXf> obsIsTwo,
+                          int curBatchSize, const unsigned from, const unsigned to)
 {
-
   assert(curBatchSize % asmc::getNumSimdLanes() == 0);
 
   Eigen::ArrayXf alphaC(states * curBatchSize);
@@ -1017,55 +919,60 @@ void HMM::forwardBatch(Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch, Eigen::Ref<Eig
   // is not overwritten.
   Eigen::ArrayXf alphaBetweenSteps(states * curBatchSize);
 
-  // fill pos=0 in alpha
+  // Initialize alpha at from
   for (int k = 0; k < states; k++) {
     for (int v = 0; v < curBatchSize; v++) {
       float firstEmission = emission1AtSite[from][k] +
-                            emission0minus1AtSite[from][k] * obsIsZeroBatch[from * curBatchSize + v] +
-                            emission2minus0AtSite[from][k] * obsIsTwoBatch[from * curBatchSize + v];
-      m_alphaBuffer[(states * from + k) * curBatchSize + v] = m_decodingQuant.initialStateProb[k] * firstEmission;
+                            emission0minus1AtSite[from][k] * obsIsZero[from * curBatchSize + v] +
+                            emission2minus0AtSite[from][k] * obsIsTwo[from * curBatchSize + v];
+      alphaBuffer[(states * from + k) * curBatchSize + v] = m_decodingQuant.initialStateProb[k] * firstEmission;
     }
   }
 
-  Eigen::Map<Eigen::ArrayXf> currentAlpha(&m_alphaBuffer[states * from * curBatchSize], states * curBatchSize);
-  asmc::calculateScalingBatch(currentAlpha, m_scalingBuffer, sums, curBatchSize, states);
-  asmc::applyScalingBatch(currentAlpha, m_scalingBuffer, curBatchSize, states);
+  Eigen::Map<Eigen::ArrayXf> currentAlpha(&alphaBuffer[states * from * curBatchSize], states * curBatchSize);
+  asmc::calculateScalingBatch(currentAlpha, scalingBuffer, sums, curBatchSize, states);
+  asmc::applyScalingBatch(currentAlpha, scalingBuffer, curBatchSize, states);
 
-  // Induction Step:
+  // Forward induction
   float lastGeneticPos = data.geneticPositions[from];
   int lastPhysicalPos = data.physicalPositions[from];
 
   for (long int pos = from + 1; pos < to; pos++) {
-    // get distances and rates
-    float recDistFromPrevious = asmc::roundMorgans(data.geneticPositions[pos] - lastGeneticPos, precision, minGenetic);
-    float currentRecRate = asmc::roundMorgans(data.recRateAtMarker[pos], precision, minGenetic);
-    Eigen::Map<Eigen::ArrayXf> previousAlpha(&m_alphaBuffer[(pos - 1) * states * curBatchSize], states * curBatchSize);
-    Eigen::Map<Eigen::ArrayXf> nextAlpha(&m_alphaBuffer[pos * states * curBatchSize], states * curBatchSize);
+    float recDist = asmc::roundMorgans(data.geneticPositions[pos] - lastGeneticPos, precision, minGenetic);
+    Eigen::Map<Eigen::ArrayXf> prevAlpha(&alphaBuffer[(pos - 1) * states * curBatchSize], states * curBatchSize);
+    Eigen::Map<Eigen::ArrayXf> nextAlpha(&alphaBuffer[pos * states * curBatchSize], states * curBatchSize);
 
     if (decodingParams.decodingSequence) {
-      int physDistFromPreviousMinusOne =
-          asmc::roundPhysical(data.physicalPositions[pos] - lastPhysicalPos - 1, precision);
-      float recDistFromPreviousMinusOne =
-          asmc::roundMorgans(recDistFromPrevious - currentRecRate, precision, minGenetic);
-      vector<float> homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDistFromPreviousMinusOne);
-      getNextAlphaBatched(recDistFromPreviousMinusOne, alphaC, curBatchSize, previousAlpha, pos, m_allZeros, m_allZeros,
+      float currentRecRate = asmc::roundMorgans(data.recRateAtMarker[pos], precision, minGenetic);
+      int physDist = asmc::roundPhysical(data.physicalPositions[pos] - lastPhysicalPos - 1, precision);
+      float recDistM1 = asmc::roundMorgans(recDist - currentRecRate, precision, minGenetic);
+      auto homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDist);
+      // Cast away const for allZeros — getNextAlphaBatched takes Ref but does not modify obs arrays
+      Eigen::ArrayXf zeros = allZeros;
+      getNextAlphaBatched(recDistM1, alphaC, curBatchSize, prevAlpha, pos, zeros, zeros,
                           AU, alphaBetweenSteps, homozEmission, homozEmission, homozEmission);
-      getNextAlphaBatched(currentRecRate, alphaC, curBatchSize, alphaBetweenSteps, pos, obsIsZeroBatch, obsIsTwoBatch,
-                          AU, nextAlpha, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
+      getNextAlphaBatched(currentRecRate, alphaC, curBatchSize, alphaBetweenSteps, pos, obsIsZero, obsIsTwo, AU,
+                          nextAlpha, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
     } else {
-      getNextAlphaBatched(recDistFromPrevious, alphaC, curBatchSize, previousAlpha, pos, obsIsZeroBatch, obsIsTwoBatch,
+      getNextAlphaBatched(recDist, alphaC, curBatchSize, prevAlpha, pos, obsIsZero, obsIsTwo,
                           AU, nextAlpha, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
     }
 
     if (pos % scalingSkip == 0) {
-      asmc::calculateScalingBatch(nextAlpha, m_scalingBuffer, sums, curBatchSize, states);
-      asmc::applyScalingBatch(nextAlpha, m_scalingBuffer, curBatchSize, states);
+      asmc::calculateScalingBatch(nextAlpha, scalingBuffer, sums, curBatchSize, states);
+      asmc::applyScalingBatch(nextAlpha, scalingBuffer, curBatchSize, states);
     }
-    // update distances
     lastGeneticPos = data.geneticPositions[pos];
     lastPhysicalPos = data.physicalPositions[pos];
   }
 
+}
+
+// Sequential forward: delegates to forwardPassInto with class-level buffers
+void HMM::forwardBatch(Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch, Eigen::Ref<Eigen::ArrayXf> obsIsTwoBatch,
+                       int curBatchSize, const unsigned from, const unsigned to)
+{
+  forwardPassInto(m_alphaBuffer, m_scalingBuffer, m_allZeros, obsIsZeroBatch, obsIsTwoBatch, curBatchSize, from, to);
 }
 
 // compute next alpha vector in linear time
@@ -1094,24 +1001,26 @@ void HMM::getNextAlphaBatched(float recDistFromPrevious, Eigen::Ref<Eigen::Array
 }
 
 // backward step
-void HMM::backwardBatch(Eigen::ArrayXf obsIsZeroBatch, Eigen::ArrayXf obsIsTwoBatch, int curBatchSize,
-                        const unsigned from, const unsigned to)
+// Backward pass writing into caller-provided beta buffer.
+// Thread-safe: only reads shared state (emission tables, decoding quantities).
+void HMM::backwardPassInto(Eigen::Ref<Eigen::ArrayXf> betaBuffer, Eigen::Ref<Eigen::ArrayXf> scalingBuffer,
+                           const Eigen::ArrayXf& allZeros,
+                           Eigen::Ref<Eigen::ArrayXf> obsIsZero, Eigen::Ref<Eigen::ArrayXf> obsIsTwo,
+                           int curBatchSize, const unsigned from, const unsigned to)
 {
-
-  // fill pos=sequenceLenght-1 in beta
+  // Initialize beta at to-1
   for (int k = 0; k < states; k++) {
     for (int v = 0; v < curBatchSize; v++) {
-      m_betaBuffer[((to - 1) * states + k) * curBatchSize + v] = 1.0f;
+      betaBuffer[((to - 1) * states + k) * curBatchSize + v] = 1.0f;
     }
   }
 
   Eigen::ArrayXf sums(curBatchSize);
-  Eigen::Map<Eigen::ArrayXf> currentBeta(&m_betaBuffer[states * (to - 1) * curBatchSize], states * curBatchSize);
+  Eigen::Map<Eigen::ArrayXf> currentBeta(&betaBuffer[states * (to - 1) * curBatchSize], states * curBatchSize);
+  asmc::calculateScalingBatch(currentBeta, scalingBuffer, sums, curBatchSize, states);
+  asmc::applyScalingBatch(currentBeta, scalingBuffer, curBatchSize, states);
 
-  asmc::calculateScalingBatch(currentBeta, m_scalingBuffer, sums, curBatchSize, states);
-  asmc::applyScalingBatch(currentBeta, m_scalingBuffer, curBatchSize, states);
-
-  // Induction Step:
+  // Backward induction
   Eigen::ArrayXf BL(curBatchSize);
   Eigen::ArrayXf BU(states * curBatchSize);
   Eigen::ArrayXf vec(states * curBatchSize);
@@ -1122,42 +1031,44 @@ void HMM::backwardBatch(Eigen::ArrayXf obsIsZeroBatch, Eigen::ArrayXf obsIsTwoBa
   float lastGeneticPos = data.geneticPositions[to - 1];
   int lastPhysicalPos = data.physicalPositions[to - 1];
 
-  for (long int pos = to - 2; pos >= from; pos--) {
-    // get distances and rates
-    float recDistFromPrevious = asmc::roundMorgans(lastGeneticPos - data.geneticPositions[pos], precision, minGenetic);
-
-    Eigen::Map<Eigen::ArrayXf> previousBeta(&m_betaBuffer[pos * states * curBatchSize], states * curBatchSize);
-    Eigen::Map<Eigen::ArrayXf> lastComputedBeta(&m_betaBuffer[(pos + 1) * states * curBatchSize], states * curBatchSize);
+  for (long int pos = to - 2; pos >= static_cast<long int>(from); pos--) {
+    float recDist = asmc::roundMorgans(lastGeneticPos - data.geneticPositions[pos], precision, minGenetic);
+    Eigen::Map<Eigen::ArrayXf> prevBeta(&betaBuffer[pos * states * curBatchSize], states * curBatchSize);
+    Eigen::Map<Eigen::ArrayXf> lastBeta(&betaBuffer[(pos + 1) * states * curBatchSize], states * curBatchSize);
 
     if (decodingParams.decodingSequence) {
-      // Undo forwardBatch's two steps from pos to pos + 1 in reverse order: first the marker at pos + 1, then the
+      // Undo forwardPassInto's two steps from pos to pos + 1 in reverse order: first the marker at pos + 1, then the
       // homozygous gap before it.
-      const float nextMarkerRecRate = asmc::roundMorgans(data.recRateAtMarker[pos + 1], precision, minGenetic);
-      int physDistFromPreviousMinusOne =
-          asmc::roundPhysical(lastPhysicalPos - data.physicalPositions[pos] - 1, precision);
-      const float recDistFromPreviousMinusOne =
-          asmc::roundMorgans(recDistFromPrevious - nextMarkerRecRate, precision, minGenetic);
-      vector<float> homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDistFromPreviousMinusOne);
-      getPreviousBetaBatched(nextMarkerRecRate, curBatchSize, lastComputedBeta, pos, obsIsZeroBatch, obsIsTwoBatch, vec,
-                             BU, BL, betaBetweenSteps, emission1AtSite[pos + 1], emission0minus1AtSite[pos + 1],
-                             emission2minus0AtSite[pos + 1]);
-      getPreviousBetaBatched(recDistFromPreviousMinusOne, curBatchSize, betaBetweenSteps, pos, m_allZeros, m_allZeros,
-                             vec, BU, BL, previousBeta, homozEmission, homozEmission, homozEmission);
+      float nextMarkerRecRate = asmc::roundMorgans(data.recRateAtMarker[pos + 1], precision, minGenetic);
+      int physDist = asmc::roundPhysical(lastPhysicalPos - data.physicalPositions[pos] - 1, precision);
+      float recDistM1 = asmc::roundMorgans(recDist - nextMarkerRecRate, precision, minGenetic);
+      auto homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDist);
+      Eigen::ArrayXf zeros = allZeros;
+      getPreviousBetaBatched(nextMarkerRecRate, curBatchSize, lastBeta, pos, obsIsZero, obsIsTwo, vec,
+                             BU, BL, betaBetweenSteps, emission1AtSite[pos + 1],
+                             emission0minus1AtSite[pos + 1], emission2minus0AtSite[pos + 1]);
+      getPreviousBetaBatched(recDistM1, curBatchSize, betaBetweenSteps, pos, zeros, zeros,
+                             vec, BU, BL, prevBeta, homozEmission, homozEmission, homozEmission);
     } else {
-      getPreviousBetaBatched(recDistFromPrevious, curBatchSize, lastComputedBeta, pos, obsIsZeroBatch, obsIsTwoBatch,
-                             vec, BU, BL, previousBeta, emission1AtSite[pos + 1], emission0minus1AtSite[pos + 1],
-                             emission2minus0AtSite[pos + 1]);
+      getPreviousBetaBatched(recDist, curBatchSize, lastBeta, pos, obsIsZero, obsIsTwo,
+                             vec, BU, BL, prevBeta, emission1AtSite[pos + 1],
+                             emission0minus1AtSite[pos + 1], emission2minus0AtSite[pos + 1]);
     }
     if (pos % scalingSkip == 0) {
-      // normalize betas using alpha scaling
-      asmc::calculateScalingBatch(previousBeta, m_scalingBuffer, sums, curBatchSize, states);
-      asmc::applyScalingBatch(previousBeta, m_scalingBuffer, curBatchSize, states);
+      asmc::calculateScalingBatch(prevBeta, scalingBuffer, sums, curBatchSize, states);
+      asmc::applyScalingBatch(prevBeta, scalingBuffer, curBatchSize, states);
     }
-    // update distances
     lastGeneticPos = data.geneticPositions[pos];
     lastPhysicalPos = data.physicalPositions[pos];
   }
 
+}
+
+// Sequential backward: delegates to backwardPassInto with class-level buffers
+void HMM::backwardBatch(Eigen::ArrayXf obsIsZeroBatch, Eigen::ArrayXf obsIsTwoBatch, int curBatchSize,
+                        const unsigned from, const unsigned to)
+{
+  backwardPassInto(m_betaBuffer, m_scalingBuffer, m_allZeros, obsIsZeroBatch, obsIsTwoBatch, curBatchSize, from, to);
 }
 
 // compute previous beta vector in linear time
