@@ -245,11 +245,25 @@ public:
   void decodeHapPairs(const std::vector<unsigned long>& individualsA, const std::vector<unsigned long>& individualsB,
                       unsigned from = 0u, unsigned to = 0u, float cmBurnIn = 0.5f);
 
-  /// Parallel version: splits pairs across threads, each with independent buffers.
-  /// Requires OpenMP. Falls back to sequential if nThreads <= 1 or OpenMP unavailable.
-  /// Produces only per-pair posterior means, MAPs and pair indices, which are the same as decodeHapPairs's. Throws
-  /// std::invalid_argument if per-pair posteriors, the sum of posteriors or per-pair file output are requested, or in
-  /// FastSMC mode.
+  /// Memory-efficient parallel pair decoding with forward checkpointing.
+  ///
+  /// Uses O(sqrt(T) * S * batchSize) memory per thread instead of O(T * S * batchSize) by:
+  ///   1. Forward pass: save alpha at sqrt(T) checkpoint intervals (rolling buffers)
+  ///   2. Backward pass: process segments right-to-left, re-compute alpha from checkpoint,
+  ///      fuse posterior gamma = alpha * beta inline, extract mean/MAP immediately
+  ///
+  /// This approach also improves cache locality since the working set (~sqrt(T) * S * bs floats)
+  /// fits in L2/L3 cache, unlike the full-table approach which strides through multi-GB buffers.
+  ///
+  /// Supports posterior mean and MAP output only. For features requiring full posterior tables
+  /// (sum-over-pairs, per-pair posterior storage, file output), use the sequential path.
+  /// Throws std::invalid_argument if per-pair posteriors, the sum of posteriors or per-pair file output are
+  /// requested, or in FastSMC mode.
+  ///
+  /// With nThreads=1, uses the checkpointed path in a single OpenMP thread (no fallback to
+  /// the full-table sequential path).
+  ///
+  /// Falls back to sequential full-table path only if OpenMP is unavailable at compile time.
   void decodeHapPairsParallel(const std::vector<unsigned long>& individualsA,
                               const std::vector<unsigned long>& individualsB,
                               unsigned from, unsigned to, float cmBurnIn, int nThreads);

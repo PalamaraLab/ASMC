@@ -140,10 +140,9 @@ HMM::HMM(Data _data, const DecodingParams& _decodingParams, int _scalingSkip)
   startBatch = sequenceLength;
   endBatch = 0;
 
-  // allocate buffers
+  // allocate buffers (alpha/beta are lazy-allocated on first sequential decode,
+  // so parallel checkpointed path avoids the O(T*S*bs) allocation)
   m_scalingBuffer.resize(m_batchSize);
-  m_alphaBuffer.resize(sequenceLength * states * m_batchSize);
-  m_betaBuffer.resize(sequenceLength * states * m_batchSize);
 
   m_allZeros.resize(sequenceLength * m_batchSize);
   m_allZeros.setZero();
@@ -555,11 +554,9 @@ void HMM::decodeHapPairsParallel(const std::vector<unsigned long>& hapsA, const 
   finishDecoding();
   return;
 #else
-  if (nThreads <= 1) {
-    decodeHapPairs(hapsA, hapsB, from, to, cmBurnIn);
-    finishDecoding();
-    return;
-  }
+  // Always use checkpointed path (even nThreads=1) for O(sqrt(T)) memory.
+  // OpenMP with 1 thread has negligible overhead vs the memory savings.
+  if (nThreads < 1) nThreads = 1;
 
   const unsigned seqLength = static_cast<unsigned>(data.sites);
   if (to == 0u) to = seqLength;
@@ -1145,6 +1142,12 @@ void HMM::decodeBatch(const vector<PairObservations>& obsBatch, const unsigned f
 {
   int curBatchSize = static_cast<int>(obsBatch.size());
   asmc::validateBatchSize(curBatchSize);
+
+  // Lazy-allocate full-table buffers on first sequential decode call
+  if (m_alphaBuffer.size() == 0) {
+    m_alphaBuffer.resize(sequenceLength * states * m_batchSize);
+    m_betaBuffer.resize(sequenceLength * states * m_batchSize);
+  }
 
   Eigen::ArrayXf obsIsZeroBatch(sequenceLength * curBatchSize);
   Eigen::ArrayXf obsIsTwoBatch(sequenceLength * curBatchSize);
