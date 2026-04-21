@@ -269,72 +269,6 @@ PYBIND11_MODULE(asmc_python_bindings, m)
       .def(py::init<DecodingParams>(), "decodingParams"_a)
       .def(py::init<const std::string&, const std::string&, const std::string&, const std::string&>(), "in_dir"_a,
            "dq_file"_a, "out_dir"_a = "", "decoding_mode"_a = "array")
-      .def_static("from_arrays", [](
-            py::array_t<int8_t, py::array::c_style | py::array::forcecast> genotypes,
-            py::array_t<int, py::array::c_style | py::array::forcecast> physical_positions,
-            py::array_t<float, py::array::c_style | py::array::forcecast> genetic_positions,
-            const std::string& dq_file,
-            bool use_ancestral,
-            float skip_csfs_distance,
-            const std::string& decoding_mode
-          ) -> std::unique_ptr<ASMC::ASMC> {
-            auto geno = genotypes.unchecked<2>();
-            int num_sites = static_cast<int>(geno.shape(0));
-            int num_haps = static_cast<int>(geno.shape(1));
-            unsigned long num_diploid = static_cast<unsigned long>(num_haps / 2);
-
-            auto phys = physical_positions.unchecked<1>();
-            auto gen = genetic_positions.unchecked<1>();
-
-            std::vector<int> physPos(num_sites);
-            std::vector<float> genPos(num_sites);
-            for (int i = 0; i < num_sites; i++) {
-              physPos[i] = phys(i);
-              genPos[i] = gen(i);
-            }
-
-            bool fold = !use_ancestral;
-            bool usingCSFS = (skip_csfs_distance != std::numeric_limits<float>::infinity());
-
-            Data data(num_sites, num_diploid, std::move(physPos), std::move(genPos),
-                      genotypes.data(), usingCSFS, fold);
-
-            bool isSequence = (decoding_mode == "sequence");
-
-            DecodingParams params;
-            params.decodingQuantFile = dq_file;
-            params.decodingModeString = decoding_mode;
-            params.decodingModeOverall = isSequence ? DecodingModeOverall::sequence : DecodingModeOverall::array;
-            if (isSequence) {
-              params.decodingMode = fold ? DecodingMode::sequenceFolded : DecodingMode::sequence;
-            } else {
-              params.decodingMode = fold ? DecodingMode::arrayFolded : DecodingMode::array;
-            }
-            params.decodingSequence = isSequence;
-            params.usingCSFS = usingCSFS;
-            params.compress = false;
-            params.useAncestral = use_ancestral;
-            params.skipCSFSdistance = skip_csfs_distance;
-            params.foldData = fold;
-            params.noBatches = false;
-            params.FastSMC = false;
-
-            return std::make_unique<ASMC::ASMC>(std::move(params), std::move(data));
-          },
-          "genotypes"_a, "physical_positions"_a, "genetic_positions"_a,
-          "dq_file"_a, "use_ancestral"_a = false, "skip_csfs_distance"_a = 0.f,
-          "decoding_mode"_a = "array",
-          R"doc(Construct ASMC from in-memory arrays, bypassing all file I/O.
-
-Args:
-    genotypes: int8 array of shape (num_sites, num_haps) with values 0/1
-    physical_positions: int array of physical positions (bp), length num_sites
-    genetic_positions: float array of genetic positions (Morgans), length num_sites
-    dq_file: path to decoding quantities file
-    use_ancestral: if False (default), fold data to minor allele
-    skip_csfs_distance: minimum genetic distance between CSFS sites (0 = use at all sites)
-    decoding_mode: "array" (default, for SNP array data) or "sequence" (for WGS data)
-)doc")
       .def("get_decoding_params", &ASMC::ASMC::getDecodingParams)
       .def("get_diploid_sample_size", &ASMC::ASMC::getDiploidSampleSize)
       .def("get_haploid_sample_size", &ASMC::ASMC::getHaploidSampleSize)
@@ -375,6 +309,10 @@ Args:
             auto geno = genotypes.unchecked<2>();
             int num_sites = static_cast<int>(geno.shape(0));
             int num_haps = static_cast<int>(geno.shape(1));
+            if (num_haps % 2 != 0)
+              throw std::invalid_argument("genotypes num_haps (axis 1) must be even (diploid)");
+            if (physical_positions.size() != num_sites || genetic_positions.size() != num_sites)
+              throw std::invalid_argument("position arrays must have length == num_sites");
             auto num_diploid = static_cast<unsigned long>(num_haps / 2);
             auto [physPos, genPos] = copyPositions(physical_positions, genetic_positions, num_sites);
             bool fold = !use_ancestral;
@@ -401,6 +339,10 @@ Args:
             auto dac = derived_allele_counts.unchecked<1>();
             auto tsc = total_sample_counts.unchecked<1>();
             int num_sites = static_cast<int>(dac.shape(0));
+            if (tsc.shape(0) != num_sites)
+              throw std::invalid_argument("total_sample_counts must have same length as derived_allele_counts");
+            if (physical_positions.size() != num_sites || genetic_positions.size() != num_sites)
+              throw std::invalid_argument("position arrays must have length == num_sites");
             auto [physPos, genPos] = copyPositions(physical_positions, genetic_positions, num_sites);
             std::vector<int> dacVec(num_sites), tscVec(num_sites);
             for (int i = 0; i < num_sites; i++) { dacVec[i] = dac(i); tscVec[i] = tsc(i); }
@@ -419,6 +361,12 @@ Args:
       // Load/clear genotypes for streaming pair decoding (used with from_counts).
       .def("load_genotypes", [](ASMC::ASMC& self,
             py::array_t<int8_t, py::array::c_style | py::array::forcecast> genotypes) {
+            if (genotypes.ndim() != 2)
+              throw std::invalid_argument("genotypes must be 2D (num_sites x num_haps)");
+            if (static_cast<int>(genotypes.shape(0)) != self.getNumSites())
+              throw std::invalid_argument("genotypes num_sites (axis 0) must match ASMC num_sites");
+            if (genotypes.shape(1) % 2 != 0)
+              throw std::invalid_argument("genotypes num_haps (axis 1) must be even (diploid)");
             self.loadSubsetGenotypes(genotypes.data(), static_cast<int>(genotypes.shape(1)));
           }, "genotypes"_a, "Load genotypes (num_sites x num_subset_haps) for a batch of pair decoding.")
       .def("clear_genotypes", &ASMC::ASMC::clearGenotypes, "Clear loaded genotypes to free memory between batches.");
