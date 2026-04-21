@@ -44,6 +44,11 @@ public:
   explicit ASMC(DecodingParams params);
 
   /**
+   * ASMC constructor from a pre-built Data object, bypassing file I/O.
+   */
+  ASMC(DecodingParams params, Data data);
+
+  /**
    * ASMC constructor that will set sensible defaults. If you wish to fine-tune parameters, use the constructor that
    * takes a DecodingParams object, which you can configure manually.
    *
@@ -110,6 +115,12 @@ public:
 
   /// Set to true to store the sum of posteriors
   void setStoreSumOfPosterior(bool storeSumOfPosterior = true);
+
+  /// Load subset genotypes for streaming pair decoding
+  void loadSubsetGenotypes(const int8_t* haplotypes, int numSubsetHaps);
+
+  /// Clear loaded genotypes to free memory between batches
+  void clearGenotypes();
 
 };
 } // namespace ASMC

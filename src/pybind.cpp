@@ -31,6 +31,45 @@
 #include <limits>
 #include <vector>
 
+namespace {
+// Helpers shared by from_arrays/from_counts pybind factories
+
+DecodingParams makeDecodingParams(const std::string& dq_file, bool use_ancestral,
+                                  float skip_csfs_distance, const std::string& decoding_mode) {
+  bool fold = !use_ancestral;
+  bool usingCSFS = (skip_csfs_distance != std::numeric_limits<float>::infinity());
+  bool isSequence = (decoding_mode == "sequence");
+  DecodingParams params;
+  params.decodingQuantFile = dq_file;
+  params.decodingModeString = decoding_mode;
+  params.decodingModeOverall = isSequence ? DecodingModeOverall::sequence : DecodingModeOverall::array;
+  params.decodingMode = isSequence
+      ? (fold ? DecodingMode::sequenceFolded : DecodingMode::sequence)
+      : (fold ? DecodingMode::arrayFolded : DecodingMode::array);
+  params.decodingSequence = isSequence;
+  params.usingCSFS = usingCSFS;
+  params.compress = false;
+  params.useAncestral = use_ancestral;
+  params.skipCSFSdistance = skip_csfs_distance;
+  params.foldData = fold;
+  params.noBatches = false;
+  params.FastSMC = false;
+  return params;
+}
+
+std::pair<std::vector<int>, std::vector<float>> copyPositions(
+    pybind11::array_t<int, pybind11::array::c_style | pybind11::array::forcecast> physical_positions,
+    pybind11::array_t<float, pybind11::array::c_style | pybind11::array::forcecast> genetic_positions,
+    int num_sites) {
+  auto phys = physical_positions.unchecked<1>();
+  auto gen = genetic_positions.unchecked<1>();
+  std::vector<int> physPos(num_sites);
+  std::vector<float> genPos(num_sites);
+  for (int i = 0; i < num_sites; i++) { physPos[i] = phys(i); genPos[i] = gen(i); }
+  return {std::move(physPos), std::move(genPos)};
+}
+} // namespace
+
 PYBIND11_MAKE_OPAQUE(std::vector<bool>)
 PYBIND11_MAKE_OPAQUE(std::vector<float>)
 PYBIND11_MAKE_OPAQUE(std::vector<std::vector<float>>)
@@ -324,5 +363,63 @@ Args:
       .def("set_store_per_pair_map", &ASMC::ASMC::setStorePerPairMap, "store_per_pair_map"_a = true)
       .def("set_write_per_pair_map", &ASMC::ASMC::setWritePerPairMap, "write_per_pair_map"_a = true)
       .def("set_store_per_pair_posterior", &ASMC::ASMC::setStorePerPairPosterior, "store_per_pair_posterior"_a = true)
-      .def("set_store_sum_of_posterior", &ASMC::ASMC::setStoreSumOfPosterior, "store_sum_of_posterior"_a = true);
+      .def("set_store_sum_of_posterior", &ASMC::ASMC::setStoreSumOfPosterior, "store_sum_of_posterior"_a = true)
+      // Construct from in-memory genotype array, bypassing all file I/O.
+      .def_static("from_arrays", [](
+            py::array_t<int8_t, py::array::c_style | py::array::forcecast> genotypes,
+            py::array_t<int, py::array::c_style | py::array::forcecast> physical_positions,
+            py::array_t<float, py::array::c_style | py::array::forcecast> genetic_positions,
+            const std::string& dq_file, bool use_ancestral,
+            float skip_csfs_distance, const std::string& decoding_mode
+          ) -> std::unique_ptr<ASMC::ASMC> {
+            auto geno = genotypes.unchecked<2>();
+            int num_sites = static_cast<int>(geno.shape(0));
+            int num_haps = static_cast<int>(geno.shape(1));
+            auto num_diploid = static_cast<unsigned long>(num_haps / 2);
+            auto [physPos, genPos] = copyPositions(physical_positions, genetic_positions, num_sites);
+            bool fold = !use_ancestral;
+            bool usingCSFS = (skip_csfs_distance != std::numeric_limits<float>::infinity());
+            Data data(num_sites, num_diploid, std::move(physPos), std::move(genPos),
+                      genotypes.data(), usingCSFS, fold);
+            auto params = makeDecodingParams(dq_file, use_ancestral, skip_csfs_distance, decoding_mode);
+            return std::make_unique<ASMC::ASMC>(std::move(params), std::move(data));
+          },
+          "genotypes"_a, "physical_positions"_a, "genetic_positions"_a,
+          "dq_file"_a, "use_ancestral"_a = false, "skip_csfs_distance"_a = 0.f,
+          "decoding_mode"_a = "array",
+          "Construct ASMC from in-memory genotype array (num_sites x num_haps), bypassing file I/O.")
+      // Construct from precomputed allele counts only (no genotypes needed).
+      // Genotypes are loaded per-batch via load_genotypes() for streaming decoding.
+      .def_static("from_counts", [](
+            py::array_t<int, py::array::c_style | py::array::forcecast> derived_allele_counts,
+            py::array_t<int, py::array::c_style | py::array::forcecast> total_sample_counts,
+            py::array_t<int, py::array::c_style | py::array::forcecast> physical_positions,
+            py::array_t<float, py::array::c_style | py::array::forcecast> genetic_positions,
+            const std::string& dq_file, bool use_ancestral,
+            float skip_csfs_distance, const std::string& decoding_mode
+          ) -> std::unique_ptr<ASMC::ASMC> {
+            auto dac = derived_allele_counts.unchecked<1>();
+            auto tsc = total_sample_counts.unchecked<1>();
+            int num_sites = static_cast<int>(dac.shape(0));
+            auto [physPos, genPos] = copyPositions(physical_positions, genetic_positions, num_sites);
+            std::vector<int> dacVec(num_sites), tscVec(num_sites);
+            for (int i = 0; i < num_sites; i++) { dacVec[i] = dac(i); tscVec[i] = tsc(i); }
+            bool fold = !use_ancestral;
+            bool usingCSFS = (skip_csfs_distance != std::numeric_limits<float>::infinity());
+            Data data(std::move(dacVec), std::move(tscVec),
+                      std::move(physPos), std::move(genPos), usingCSFS, fold);
+            auto params = makeDecodingParams(dq_file, use_ancestral, skip_csfs_distance, decoding_mode);
+            return std::make_unique<ASMC::ASMC>(std::move(params), std::move(data));
+          },
+          "derived_allele_counts"_a, "total_sample_counts"_a,
+          "physical_positions"_a, "genetic_positions"_a,
+          "dq_file"_a, "use_ancestral"_a = false, "skip_csfs_distance"_a = 0.f,
+          "decoding_mode"_a = "array",
+          "Construct ASMC from allele counts only. Use load_genotypes()/clear_genotypes() to stream haplotype subsets.")
+      // Load/clear genotypes for streaming pair decoding (used with from_counts).
+      .def("load_genotypes", [](ASMC::ASMC& self,
+            py::array_t<int8_t, py::array::c_style | py::array::forcecast> genotypes) {
+            self.loadSubsetGenotypes(genotypes.data(), static_cast<int>(genotypes.shape(1)));
+          }, "genotypes"_a, "Load genotypes (num_sites x num_subset_haps) for a batch of pair decoding.")
+      .def("clear_genotypes", &ASMC::ASMC::clearGenotypes, "Clear loaded genotypes to free memory between batches.");
 }

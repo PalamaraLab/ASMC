@@ -83,6 +83,25 @@ public:
        const int8_t* haplotypes,
        bool usingCSFS, bool foldData);
 
+  /**
+   * Construct from precomputed allele counts, without loading genotypes.
+   * Genotypes can be loaded later via loadSubsetGenotypes().
+   */
+  Data(std::vector<int> derivedCounts, std::vector<int> totalCounts,
+       std::vector<int> physPositions, std::vector<float> genPositions,
+       bool usingCSFS, bool foldData);
+
+  /**
+   * Load genotypes for a subset of haplotypes (for streaming pair decoding).
+   * Does NOT recompute emissions — allele counts must already be set.
+   */
+  void loadSubsetGenotypes(const int8_t* haplotypes, int numSubsetHaps);
+
+  /**
+   * Clear loaded genotypes to free memory between batches.
+   */
+  void clearGenotypes();
+
   /// Number of sites in the haplotypes file for `inFileRoot`, i.e. its non-blank lines.
   static int countHapLines(std::string inFileRoot);
 

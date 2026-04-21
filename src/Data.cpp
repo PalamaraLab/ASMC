@@ -179,6 +179,80 @@ Data::Data(int numSites, unsigned long numDiploidSamples,
   }
 }
 
+// Construct from precomputed allele counts only (no genotypes).
+// Emission tables are computed from these counts during HMM construction.
+// Genotypes are loaded later via loadSubsetGenotypes() for each decode batch.
+Data::Data(std::vector<int> derivedCounts, std::vector<int> totalCounts,
+           std::vector<int> physPos, std::vector<float> genPos,
+           bool usingCSFS, bool foldData_)
+{
+  sites = static_cast<int>(derivedCounts.size());
+  sampleSize = 0;
+  haploidSampleSize = 0;
+  decodingUsesCSFS = usingCSFS;
+  foldToMinorAlleles = foldData_;
+  mJobbing = false;
+
+  physicalPositions = std::move(physPos);
+  geneticPositions = std::move(genPos);
+  derivedAlleleCounts = std::move(derivedCounts);
+  totalSamplesCount = std::move(totalCounts);
+  siteWasFlippedDuringFolding = std::vector<bool>(sites, false);
+
+  recRateAtMarker = std::vector<float>(sites, 0.f);
+  for (int i = 1; i < sites; i++) {
+    float genDist = geneticPositions[i] - geneticPositions[i - 1];
+    float physDist = static_cast<float>(physicalPositions[i] - physicalPositions[i - 1]);
+    recRateAtMarker[i] = (physDist > 0) ? genDist / physDist : 0.f;
+  }
+  if (sites > 1) {
+    recRateAtMarker[0] = recRateAtMarker[1];
+  }
+}
+
+// Load a subset of haplotypes for pair decoding. Called between decode batches.
+// The caller must pre-fold genotypes (flip sites where derived > ancestral)
+// to match the folded allele counts used for emission computation.
+// Does NOT recompute emissions — allele counts are already set from the constructor.
+void Data::loadSubsetGenotypes(const int8_t* haplotypes, int numSubsetHaps)
+{
+  unsigned long numDiploid = static_cast<unsigned long>(numSubsetHaps / 2);
+  sampleSize = numDiploid;
+  haploidSampleSize = static_cast<unsigned long>(numSubsetHaps);
+
+  // Dummy sample names — needed by writePerPairOutput which indexes into IIDList
+  FamIDList.resize(numDiploid);
+  IIDList.resize(numDiploid);
+  famAndIndNameList.resize(numDiploid);
+  for (unsigned long i = 0; i < numDiploid; i++) {
+    auto name = fmt::format("sample_{}", i);
+    FamIDList[i] = name;
+    IIDList[i] = name;
+    famAndIndNameList[i] = name + "\t" + name;
+  }
+
+  individuals.clear();
+  individuals.reserve(numDiploid);
+  for (unsigned long i = 0; i < numDiploid; i++) {
+    individuals.emplace_back(sites);
+  }
+
+  for (int s = 0; s < sites; s++) {
+    for (int h = 0; h < numSubsetHaps; h++) {
+      individuals[h / 2].setGenotype(
+          (h % 2) + 1, s,
+          haplotypes[static_cast<size_t>(s) * numSubsetHaps + h] == 1);
+    }
+  }
+}
+
+void Data::clearGenotypes()
+{
+  individuals.clear();
+  sampleSize = 0;
+  haploidSampleSize = 0;
+}
+
 // *** read genetic map
 vector<pair<unsigned long, double>> Data::readMapFastSMC(const string& inFileRoot, const string& mapFile)
 {
