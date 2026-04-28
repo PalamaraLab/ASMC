@@ -79,6 +79,7 @@ set(ASMC_source
         ${ASMC_source_dir}/HMM.cpp
         ${ASMC_source_dir}/HmmUtils.cpp
         ${ASMC_source_dir}/BinaryDataReader.cpp
+        ${ASMC_source_dir}/Cluster.cpp
         ${ASMC_source_dir}/Data.cpp
         ${ASMC_source_dir}/DecodingParams.cpp
         ${ASMC_source_dir}/DecodingQuantities.cpp
@@ -90,6 +91,7 @@ set(ASMC_source
         ${ASMC_source_dir}/Timer.cpp
         ${ASMC_source_dir}/ASMC.cpp
         ${ASMC_source_dir}/hashing/Utils.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/3rd_party/fastcluster/fastcluster_facade.cpp
         )
 
 set(ASMC_headers
@@ -109,6 +111,7 @@ set(ASMC_headers
         ${ASMC_source_dir}/Timer.hpp
         ${ASMC_source_dir}/Types.hpp
         ${ASMC_source_dir}/ASMC.hpp
+        ${ASMC_source_dir}/Cluster.hpp
         ${ASMC_source_dir}/hashing/ExtendHash.hpp
         ${ASMC_source_dir}/hashing/Individuals.hpp
         ${ASMC_source_dir}/hashing/Match.hpp
@@ -131,6 +134,7 @@ set(convertBinary_main
 set(ASMC_unit_tests
         ${ASMC_test_dir}/test_ASMC.cpp
         ${ASMC_test_dir}/test_binary_data_reader.cpp
+        ${ASMC_test_dir}/test_cluster.cpp
         ${ASMC_test_dir}/test_data.cpp
         ${ASMC_test_dir}/test_fastsmc_hashing_input.cpp
         ${ASMC_test_dir}/test_hashing.cpp
@@ -153,7 +157,15 @@ set(ASMC_regression
 # The main ASMC library
 add_library(ASMC ${ASMC_source} ${ASMC_headers})
 target_include_directories(ASMC PUBLIC ${ASMC_source_dir})
+target_include_directories(ASMC PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/3rd_party/fastcluster)
 target_link_libraries(ASMC PRIVATE ASMC_data_module)
+# fastcluster.cpp is included via the facade and triggers a few unused-static
+# warnings (only NN_chain_core<AVERAGE> is referenced). Suppress for the
+# vendored TU only — keep the strict flags for ASMC's own sources.
+set_source_files_properties(
+        ${CMAKE_CURRENT_SOURCE_DIR}/3rd_party/fastcluster/fastcluster_facade.cpp
+        PROPERTIES COMPILE_OPTIONS "-Wno-unused-function;-Wno-unknown-pragmas"
+)
 
 # The main ASMC executable
 add_executable(ASMC_exe ${ASMC_main})
