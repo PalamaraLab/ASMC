@@ -15,6 +15,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <limits>
 #include <string>
 
 #include "DecodingParams.hpp"
@@ -40,7 +41,7 @@ TEST_CASE("test DecodingParams", "[DecodingParams]")
         true, // _usingCSFS
         true, // _compress, override default
         false, // _useAncestral
-        nan("") // _skipCSFSdistance, override default
+        std::numeric_limits<float>::quiet_NaN() // _skipCSFSdistance, override default
     );
     REQUIRE(params.decodingMode == DecodingMode::sequenceFolded);
     REQUIRE(params.compress == true);
