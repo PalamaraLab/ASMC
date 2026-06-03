@@ -22,6 +22,7 @@
 #include <type_traits>
 
 #include "StringUtils.hpp"
+#include "test_fixtures.hpp"
 
 TEST_CASE("test string conversions", "[StringUtils]") {
 
@@ -71,4 +72,27 @@ TEST_CASE("test SOME coverage", "[coverage]") {
     CHECK(s == ";;;;;");
 }
 
+TEST_CASE("test fixture helpers", "[fixtures]") {
+  asmc::test::TempDirectory temp;
+  const auto input = asmc::test::writeTinyAsmcInputRoot(temp);
+
+  CHECK(std::filesystem::is_regular_file(input.sampleFile));
+  CHECK(std::filesystem::is_regular_file(input.hapFile));
+  CHECK(std::filesystem::is_regular_file(input.mapFile));
+
+  const auto posterior = asmc::test::makeColumnNormalisedPosterior(3u, 4u);
+  REQUIRE(posterior.rows() == 3);
+  REQUIRE(posterior.cols() == 4);
+  CHECK(posterior.col(0).sum() == Approx(1.f));
+  CHECK(posterior.col(3).sum() == Approx(1.f));
+
+  const auto buffer = asmc::test::makeBatchedPosteriorBuffer({posterior}, 2);
+  REQUIRE(buffer.size() == 3 * 4 * 2);
+  CHECK(buffer(0) == posterior(0, 0));
+  CHECK(buffer(1) == 0.f);
+
+  const auto obs = asmc::test::makePairObservations({true, false}, {false, true});
+  CHECK(obs.obsBits.size() == 2ul);
+  CHECK(obs.homMinorBits.size() == 2ul);
+}
 
