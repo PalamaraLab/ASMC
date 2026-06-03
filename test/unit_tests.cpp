@@ -14,15 +14,17 @@
 //    along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
 
-// This tells Catch to provide a main() - only do this in one cpp file
-#define CATCH_CONFIG_MAIN
-#include "catch.hpp"
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
 #include <limits>
 #include <type_traits>
 
 #include "StringUtils.hpp"
 #include "test_fixtures.hpp"
+
+using Catch::Approx;
 
 TEST_CASE("test string conversions", "[StringUtils]") {
 
@@ -95,4 +97,3 @@ TEST_CASE("test fixture helpers", "[fixtures]") {
   CHECK(obs.obsBits.size() == 2ul);
   CHECK(obs.homMinorBits.size() == 2ul);
 }
-

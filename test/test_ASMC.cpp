@@ -13,7 +13,8 @@
 //    You should have received a copy of the GNU General Public License
 //    along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
-#include "catch.hpp"
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <utility>
 #include <vector>
@@ -23,6 +24,8 @@
 #include <Eigen/Core>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
+
+using Catch::Approx;
 
 TEST_CASE("test ASMC decodePairsArray", "[ASMC]")
 {

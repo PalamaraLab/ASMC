@@ -219,6 +219,19 @@ FetchContent_MakeAvailable(highway)
 target_link_libraries(ASMC PRIVATE hwy)
 target_compile_definitions(ASMC PRIVATE HWY_DYNAMIC_DISPATCH=1)
 
+if (ASMC_TESTING)
+    # Fetch Catch2 at configure time rather than vendoring the amalgamated header.
+    set(CATCH_INSTALL_DOCS OFF CACHE BOOL "Disable Catch2 docs" FORCE)
+    set(CATCH_INSTALL_EXTRAS OFF CACHE BOOL "Disable Catch2 extras" FORCE)
+    set(CATCH_DEVELOPMENT_BUILD OFF CACHE BOOL "Disable Catch2 development build" FORCE)
+    FetchContent_Declare(
+            catch2
+            GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+            GIT_TAG        6f28b578ecf5a9f88a2c160e4abfb5d5d67e0480 # v3.8.1
+    )
+    FetchContent_MakeAvailable(catch2)
+endif ()
+
 if (ASMC_DISABLE_SIMD)
     target_compile_definitions(ASMC PUBLIC HWY_COMPILE_ONLY_SCALAR=1 ASMC_SIMD_DISABLED=1)
 endif ()
@@ -255,12 +268,12 @@ if (ASMC_TESTING)
 
     add_executable(ASMC_unit_tests ${ASMC_unit_tests})
     target_include_directories(ASMC_unit_tests PRIVATE ${ASMC_test_dir})
-    target_link_libraries(ASMC_unit_tests PRIVATE ASMC fmt::fmt)
+    target_link_libraries(ASMC_unit_tests PRIVATE ASMC fmt::fmt Catch2::Catch2WithMain)
     add_test(Asmc_unit_tests ASMC_unit_tests)
 
     add_executable(ASMC_regression ${ASMC_regression})
     target_include_directories(ASMC_regression PRIVATE ${ASMC_test_dir})
-    target_link_libraries(ASMC_regression PRIVATE ASMC ASMC_data_module)
+    target_link_libraries(ASMC_regression PRIVATE ASMC ASMC_data_module Catch2::Catch2WithMain)
     add_test(NAME regression COMMAND ASMC_regression)
 endif ()
 

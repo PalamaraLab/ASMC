@@ -13,8 +13,8 @@
 //    You should have received a copy of the GNU General Public License
 //    along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
-#define CATCH_CONFIG_MAIN
-#include "catch.hpp"
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include "ASMC.hpp"
 #include "FileUtils.hpp"
@@ -23,6 +23,8 @@
 #include <Eigen/Core>
 
 #include <sstream>
+
+using Catch::Approx;
 
 TEST_CASE("test ASMC regression", "[HMM_regression]")
 {
