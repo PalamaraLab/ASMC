@@ -12,6 +12,9 @@ on:
       - published
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   build_wheels_cloud:
     name: Build wheels on ${{ matrix.os }}
@@ -63,15 +66,16 @@ jobs:
     steps:
 
       - name: checkout repo & submodules
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           submodules: true
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v3.2.0
+        uses: pypa/cibuildwheel@7c619efba910c04005a835b110b057fc28fd6e93 # v3.2.0
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: wheels-cloud-${{ matrix.os }}
           path: ./wheelhouse/*.whl
@@ -85,14 +89,14 @@ jobs:
 
     steps:
       - name: Download wheels from cloud runners
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           pattern: wheels-cloud-*
           merge-multiple: true
           path: wheels
 
-      - uses: pypa/gh-action-pypi-publish@v1.13.0
+      - uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
         with:
           user: __token__
-          password: ${{ secrets.PYPI_TOKEN }}
+          password: ${{ secrets.PYPI_TOKEN }} # zizmor: ignore[use-trusted-publishing] Trusted Publishing is not yet configured on PyPI
           packages_dir: wheels/
