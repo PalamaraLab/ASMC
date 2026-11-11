@@ -9,13 +9,12 @@
 # ASMC and FastSMC
 
 This repository provides ASMC and its extension FastSMC, implemented in C++ with Python bindings.
-Prebuilt CPython wheels are available for Linux (compatible with glibc ≥ 2.28) and macOS (built on macOS 15 for x86_64 and macOS 14 for arm64).
+Prebuilt CPython wheels are available for Linux (compatible with glibc ≥ 2.28) and macOS 15 or later on Apple Silicon (arm64).
 
 | Platform \ CPython          | ≤3.8 | 3.9 | 3.10 | 3.11 | 3.12 | 3.13 | 3.14 |
 |-----------------------------| ---- | --- | ---- | ---- | ---- | ---- | ---- |
 | Linux x86_64                | ❌    | ✅   | ✅    | ✅    | ✅    | ✅    | ✅    |
 | Linux aarch64               | ❌    | ✅   | ✅    | ✅    | ✅    | ✅    | ✅    |
-| macOS Intel (x86_64)        | ❌    | ✅   | ✅    | ✅    | ✅    | ✅    | ✅    |
 | macOS Apple Silicon (arm64) | ❌    | ✅   | ✅    | ✅    | ✅    | ✅    | ✅    |
 
 ## Quickstart
