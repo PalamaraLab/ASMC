@@ -9,6 +9,9 @@ on:
       - '**'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
 
   build-and-test:
@@ -22,10 +25,11 @@ jobs:
     steps:
 
       - name: checkout repo & submodules
-        uses: actions/checkout@v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: true
           fetch-depth: 0
+          persist-credentials: false
 
       - name: install deps
         run: |
