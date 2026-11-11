@@ -4,9 +4,13 @@ on:
   push:
     branches:
       - main
+    paths:
+      - '.github/**'
   pull_request:
     branches:
       - '**'
+    paths:
+      - '.github/**'
   schedule:
     - cron: '15 3 * * 1'  # Every Monday at 03:15 UTC
   workflow_dispatch:
@@ -14,10 +18,19 @@ on:
 permissions:
   contents: read
 
+# Cancel a PR's previous run when a new commit is pushed. Other events are grouped by commit SHA,
+# so pushes to main never cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   zizmor:
     name: Audit workflows with zizmor
     runs-on: ubuntu-26.04
+    # The weekly run catches newly published advisories. Both repos hold the same workflows, so
+    # it runs on the public repo only, where minutes are free.
+    if: github.event_name != 'schedule' || github.repository == 'PalamaraLab/ASMC'
     timeout-minutes: 10
 
     steps:

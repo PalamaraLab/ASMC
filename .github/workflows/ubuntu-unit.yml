@@ -4,21 +4,46 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'docs/**'
+      - 'notebooks/**'
+      - '**.md'
+      - '.readthedocs.yaml'
   pull_request:
     branches:
       - '**'
+    paths-ignore:
+      - 'docs/**'
+      - 'notebooks/**'
+      - '**.md'
+      - '.readthedocs.yaml'
+  schedule:
+    - cron: '0 4 * * 1'  # Every Monday at 04:00 UTC
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Cancel a PR's previous run when a new commit is pushed. Other events are grouped by commit SHA,
+# so pushes to main never cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
 
+  # Builds once and runs both the unit and regression tests, to save a second configure and build.
   build-and-test:
-    name: Unit tests on Ubuntu
+    name: Unit and regression tests on Ubuntu
     runs-on: ubuntu-24.04
-    if:  ${{ github.event_name == 'pull_request' || github.repository == 'PalamaraLab/ASMC' }}
-    timeout-minutes: 10
+    env:
+      CXX: g++-14
+    # Runs on every PR in the private repo; on the public repo it runs for every event.
+    if: >-
+      github.repository == 'PalamaraLab/ASMC'
+      || github.event_name == 'pull_request'
+      || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 15
 
     steps:
 
@@ -37,14 +62,19 @@ jobs:
       - name: make build directory
         run: mkdir -p build_dir
 
+      # Release build to match the regression snapshot data.
       - name: cmake configure
-        run: cmake ..
+        run: cmake .. -DCMAKE_BUILD_TYPE=Release
         working-directory: build_dir
 
       - name: cmake build
-        run: cmake --build . --parallel 4 --target ASMC_unit_tests
+        run: cmake --build . --parallel 4 --target ASMC_unit_tests ASMC_regression
         working-directory: build_dir
 
       - name: cmake test
         run: ctest -j2 -R '^unit:' --output-on-failure
+        working-directory: build_dir
+
+      - name: regression test
+        run: ctest -R regression --output-on-failure
         working-directory: build_dir
