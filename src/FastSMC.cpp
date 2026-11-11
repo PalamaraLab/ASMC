@@ -59,11 +59,7 @@ void ASMC::FastSMC::run()
   const auto w_j = mData.w_j;
   const bool is_j_above_diag = mData.is_j_above_diag;
 
-  auto isSampleInJob = [windowSize, w_i, w_j, jobs, jobID](unsigned i) {
-    return ((i >= (uint)((w_i - 1) * windowSize) / 2 && i < (uint)(w_i * windowSize) / 2) ||
-            (i >= (uint)((w_j - 1) * windowSize) / 2 && i < (uint)(w_j * windowSize) / 2) ||
-            (jobs == jobID && i >= (uint)((w_j - 1) * windowSize) / 2));
-  };
+  auto isSampleInJob = [this](const unsigned i) { return mData.isSampleInJob(i); };
 
   // *** read Individuals information
   {

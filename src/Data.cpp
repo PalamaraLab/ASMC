@@ -49,8 +49,10 @@ Data::Data(const DecodingParams& params)
   decodingUsesCSFS = params.usingCSFS;
   const bool FastSMC = params.FastSMC;
 
-  // Determine if there is jobbing based on whether the jobID and jobs are at their default values
-  mJobbing = (jobID != -1) && (jobs != -1);
+  // Only FastSMC's hashing step divides samples between jobs; see mJobbing
+  mJobbing = FastSMC && params.hashing;
+  mJobInd = jobID;
+  mJobs = jobs;
 
   sites = countHapLines(inFileRoot);
   sampleSize = countSamplesLines(inFileRoot);
@@ -85,7 +87,7 @@ Data::Data(const DecodingParams& params)
     is_j_above_diag = (cpt_job - (cpt_tot_job - jobID)) % 2 == 1;
   }
 
-  readSamplesList(inFileRoot, jobID, jobs);
+  readSamplesList(inFileRoot);
 
   for (auto i = 0ul; i < famAndIndNameList.size(); i++) {
     individuals.emplace_back(sites);
@@ -93,7 +95,7 @@ Data::Data(const DecodingParams& params)
 
   if (FastSMC) {
     vector<pair<unsigned long, double>> geneticMap = readMapFastSMC(inFileRoot);
-    readHaps(inFileRoot, foldToMinorAlleles, jobID, jobs, geneticMap);
+    readHaps(inFileRoot, foldToMinorAlleles, geneticMap);
   } else {
     readHaps(inFileRoot, foldToMinorAlleles);
     readMap(inFileRoot);
@@ -194,7 +196,7 @@ void Data::readMap(const std::string& inFileRoot, const std::string& mapFile)
   recRateAtMarker.at(0) = recRateAtMarker.at(1);
 }
 
-void Data::readSamplesList(const string& inFileRoot, int jobID, int jobs)
+void Data::readSamplesList(const string& inFileRoot)
 {
   string line;
   // Read samples file
@@ -220,7 +222,7 @@ void Data::readSamplesList(const string& inFileRoot, int jobID, int jobs)
         (splitStr[0] == "0" && splitStr[1] == "0" && splitStr[2] == "0")) {
       continue;
     }
-    if (readSample(linesProcessed, jobID, jobs)) {
+    if (isSampleInJob(linesProcessed)) {
       string famId = splitStr[0];
       string IId = splitStr[1];
       FamIDList.push_back(famId);
@@ -233,17 +235,19 @@ void Data::readSamplesList(const string& inFileRoot, int jobID, int jobs)
   cout << "Read " << linesProcessed << " samples." << endl;
 }
 
-bool Data::readSample(const unsigned linesProcessed, const int jobID, const int jobs)
+bool Data::isSampleInJob(const unsigned long sampleIndex) const
 {
-
-  // If we are not doing jobbing we read all samples
   if (!mJobbing) {
     return true;
-  } else {
-    return (linesProcessed >= (uint)((w_i - 1) * windowSize) / 2 && linesProcessed < (uint)(w_i * windowSize) / 2) ||
-           (linesProcessed >= (uint)((w_j - 1) * windowSize) / 2 && linesProcessed < (uint)(w_j * windowSize) / 2) ||
-           (jobs == jobID && linesProcessed >= (uint)((w_j - 1) * windowSize) / 2);
   }
+
+  // Window w covers samples [(w - 1) * windowSize / 2, w * windowSize / 2). The last job also takes every sample from
+  // the start of window w_j onwards, so that samples beyond the last full window are included.
+  const auto windowStart = [this](const unsigned window) { return (uint)((window - 1) * windowSize) / 2; };
+  const auto windowEnd = [this](const unsigned window) { return (uint)(window * windowSize) / 2; };
+  return (sampleIndex >= windowStart(w_i) && sampleIndex < windowEnd(w_i)) ||
+         (sampleIndex >= windowStart(w_j) && sampleIndex < windowEnd(w_j)) ||
+         (mJobs == mJobInd && sampleIndex >= windowStart(w_j));
 }
 
 int Data::countHapLines(string inFileRoot)
@@ -379,7 +383,7 @@ void Data::readHaps(string inFileRoot, bool foldToMinorAlleles)
        << " of which are monomorphic. This job will focus on " << FamIDList.size() * 2 << " haploid samples." << endl;
 }
 
-void Data::readHaps(string inFileRoot, bool foldToMinorAlleles, int jobID, int jobs,
+void Data::readHaps(const string& inFileRoot, bool foldToMinorAlleles,
                     vector<pair<unsigned long int, double>>& genetic_map)
 {
   FileUtils::AutoGzIfstream hapsBr;
@@ -459,9 +463,7 @@ void Data::readHaps(string inFileRoot, bool foldToMinorAlleles, int jobID, int j
     // cout << (DAcount <= totalSamples - DAcount) << "\t" << siteWasFlippedDuringFolding[pos] << endl;
     uint cpt = 0;
     for (uint d = 0; d < sampleSize; d++) {
-      if ((d >= (uint)((w_i - 1) * windowSize) / 2 && d < (uint)(w_i * windowSize) / 2) ||
-          (d >= (uint)((w_j - 1) * windowSize) / 2 && d < (uint)(w_j * windowSize) / 2) ||
-          (jobs == jobID && d >= (uint)((w_j - 1) * windowSize) / 2)) {
+      if (isSampleInJob(d)) {
         Individual& ind = individuals[cpt];
         cpt++;
         uint hap1 = 2 * d;
