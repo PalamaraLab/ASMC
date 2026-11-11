@@ -13,18 +13,15 @@
 //    You should have received a copy of the GNU General Public License
 //    along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
+#include <catch2/catch_test_macros.hpp>
 
-// This tells Catch to provide a main() - only do this in one cpp file
-#define CATCH_CONFIG_MAIN
-#include "catch.hpp"
-
-#include <limits>
-#include <type_traits>
+#include <cmath>
+#include <string>
 
 #include "StringUtils.hpp"
 
-TEST_CASE("test string conversions", "[StringUtils]") {
-
+TEST_CASE("test string conversions", "[StringUtils]")
+{
   std::string str_1_0 = "1.0";
   std::string str_1e0 = "1.0E0";
   std::string str_minus1_0 = "-1.0";
@@ -64,11 +61,9 @@ TEST_CASE("test string conversions", "[StringUtils]") {
   CHECK_THROWS_AS(StringUtils::stod(greeting), std::invalid_argument);
 }
 
-TEST_CASE("test SOME coverage", "[coverage]") {
+TEST_CASE("test delimiter detection", "[StringUtils]")
+{
+  auto s = StringUtils::findDelimiters("this;string;has;five;semi;colons", ";");
 
-    auto s = StringUtils::findDelimiters("this;string;has;five;semi;colons", ";");
-
-    CHECK(s == ";;;;;");
+  CHECK(s == ";;;;;");
 }
-
-

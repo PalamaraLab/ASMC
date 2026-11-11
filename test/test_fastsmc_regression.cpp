@@ -13,7 +13,8 @@
 //    You should have received a copy of the GNU General Public License
 //    along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
-#include "catch.hpp"
+#include <catch2/catch_approx.hpp>
+#include <catch2/catch_test_macros.hpp>
 
 #include <string>
 #include <vector>
@@ -25,6 +26,8 @@
 #include "FileUtils.hpp"
 #include "Simd.hpp"
 #include "Timer.hpp"
+
+using Catch::Approx;
 
 TEST_CASE("test FastSMC with hashing regression test", "[FastSMC_regression]")
 {

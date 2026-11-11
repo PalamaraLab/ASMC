@@ -13,7 +13,7 @@
 //    You should have received a copy of the GNU General Public License
 //    along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include "hashing/ExtendHash.hpp"
 #include "hashing/Individuals.hpp"

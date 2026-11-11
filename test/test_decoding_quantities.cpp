@@ -13,13 +13,14 @@
 //    You should have received a copy of the GNU General Public License
 //    along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <string>
 
 #include "DecodingQuantities.hpp"
 
-using Catch::Matchers::Contains;
+using Catch::Matchers::ContainsSubstring;
 
 TEST_CASE("test validate decoding quantities file", "[DecodingQuantities]")
 {
@@ -30,7 +31,7 @@ TEST_CASE("test validate decoding quantities file", "[DecodingQuantities]")
   SECTION("test nonexistent file")
   {
     CHECK_THROWS_WITH(DecodingQuantities{nonExistentDecodingQuantitiesFile},
-                      Contains("random_nonexistent_file.txt does not exist"));
+                      ContainsSubstring("random_nonexistent_file.txt does not exist"));
   }
 
   SECTION("test good file")
@@ -41,7 +42,7 @@ TEST_CASE("test validate decoding quantities file", "[DecodingQuantities]")
   SECTION("test bad file")
   {
     CHECK_THROWS_WITH(DecodingQuantities{badDecodingQuantitiesFile},
-                      Contains("decoding_quantities_bad.txt does not seem to contain the correct information") &&
-                          Contains("but instead found \"this file does not start with"));
+                      ContainsSubstring("decoding_quantities_bad.txt does not seem to contain the correct information") &&
+                          ContainsSubstring("but instead found \"this file does not start with"));
   }
 }
