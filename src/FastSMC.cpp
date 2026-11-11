@@ -16,6 +16,7 @@
 #include "FastSMC.hpp"
 
 #include <iostream>
+#include <istream>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -26,6 +27,30 @@
 #include "hashing/Individuals.hpp"
 #include "hashing/SeedHash.hpp"
 #include "Timer.hpp"
+
+namespace
+{
+
+/**
+ * Count the haplotypes carrying allele '1' among the next `numHaplotypes` single-character fields of `haplotypes`,
+ * then rewind the stream so that the caller can read the same fields again.
+ */
+int countAlleleOne(std::istream& haplotypes, const int numHaplotypes)
+{
+  const auto start = haplotypes.tellg();
+  int count = 0;
+  char allele = 0;
+  for (int i = 0; i < numHaplotypes && haplotypes >> allele; ++i) {
+    if (allele == '1') {
+      ++count;
+    }
+  }
+  haplotypes.clear();
+  haplotypes.seekg(start);
+  return count;
+}
+
+} // namespace
 
 ASMC::FastSMC::FastSMC(DecodingParams params) : mParams{std::move(params)}, mData{mParams}, mHmm{mData, mParams}
 {
@@ -139,48 +164,44 @@ void ASMC::FastSMC::run()
 
     // track position through genetic map
     unsigned int snp_ctr;
-    char al[2], inp;
+    // Alleles are read as strings because they can be longer than one character (e.g. indels). Reading them as single
+    // characters would shift every haplotype on the line.
+    std::string alleleA;
+    std::string alleleB;
+    char inp = 0;
 
     while (true) {
       snp_ctr = 0;
       while (getline(file_haps, line)) {
-        // read the meta data
+        // read the meta data. Clear map_field first: extraction leaves it unchanged on a blank line.
         ss.clear();
         ss.str(line);
-        ss >> map_field >> marker_id >> marker_pos >> al[0] >> al[1];
+        map_field.clear();
+        ss >> map_field >> marker_id >> marker_pos >> alleleA >> alleleB;
         if (map_field.empty()) {
           continue;
         }
 
-        // restrict on MAF
+        // Sites outside the MAF range still occupy their place in the current word, with no markers set, so that
+        // word * hashingWordSize stays an index into the sites that the HMM and the match lengths use.
+        bool siteInMafRange = true;
         if (PAR_MIN_MAF > 0) {
-          int maf_ctr = 0;
-          for (int i = 0; i < num_ind_tot; i++) {
-            ss >> inp;
-            if (inp == '1') {
-              maf_ctr++;
-            }
-          }
+          const int maf_ctr = countAlleleOne(ss, static_cast<int>(num_ind_tot));
           auto maf = static_cast<float>(maf_ctr / static_cast<double>(num_ind_tot));
-          if (maf < PAR_MIN_MAF || maf > 1 - PAR_MIN_MAF) {
-            continue;
-          }
-
-          // re-load the data
-          ss.clear();
-          ss.str(line);
-          ss >> map_field >> map_field >> map_field >> al[0] >> al[1];
+          siteInMafRange = !(maf < PAR_MIN_MAF || maf > 1 - PAR_MIN_MAF);
         }
 
         // read haplotype
-        unsigned int hap_ctr = 0;
-        for (int i = 0; i < num_ind_tot; i++) {
-          ss >> inp;
-          if (isSampleInJob(i / 2)) {
-            if (inp == '1') {
-              all_ind[hap_ctr].setMarker(GLOBAL_READ_WORDS, snp_ctr);
+        if (siteInMafRange) {
+          unsigned int hap_ctr = 0;
+          for (int i = 0; i < num_ind_tot; i++) {
+            ss >> inp;
+            if (isSampleInJob(i / 2)) {
+              if (inp == '1') {
+                all_ind[hap_ctr].setMarker(GLOBAL_READ_WORDS, snp_ctr);
+              }
+              hap_ctr++;
             }
-            hap_ctr++;
           }
         }
         snp_ctr++;
