@@ -65,8 +65,42 @@ public:
    */
   explicit Data(const DecodingParams& params);
 
+  /// Number of sites in the haplotypes file for `inFileRoot`, i.e. its non-blank lines.
   static int countHapLines(std::string inFileRoot);
+
+  /// Number of samples in the samples file for `inFileRoot` (see isSampleLine).
   static int countSamplesLines(std::string inFileRoot);
+
+  /**
+   * Path of the samples file for `inFileRoot`: `.samples`, or else `.sample`.
+   * @throws std::runtime_error if neither exists
+   */
+  static std::string findSamplesFile(const std::string& inFileRoot);
+
+  /**
+   * Path of the haplotypes file for `inFileRoot`: the first of `.hap.gz`, `.hap`, `.haps.gz` and `.haps` that exists.
+   * @throws std::runtime_error if none exists
+   */
+  static std::string findHapsFile(const std::string& inFileRoot);
+
+  /**
+   * Path of the genetic map: `mapFile` if it is not empty, otherwise `.map.gz` or `.map` next to `inFileRoot`.
+   * @throws std::runtime_error if the chosen file does not exist
+   */
+  static std::string findMapFile(const std::string& inFileRoot, const std::string& mapFile);
+
+  /**
+   * Whether a line of a samples file, split into whitespace-separated fields, names a sample. Blank lines and the two
+   * header lines ("ID_1 ID_2 missing" and "0 0 0") do not.
+   * @throws std::runtime_error if any other line has fewer than two fields (family ID and individual ID)
+   */
+  static bool isSampleLine(const std::vector<std::string>& fields);
+
+  /**
+   * Chromosome number from the first column of a haplotypes file, e.g. 1 from "1", "chr1" or "1:12345". Returns 0 if
+   * the name is not a number between 1 and 1260 (the most chromosomes of any known organism), e.g. "X".
+   */
+  static int parseChromosomeNumber(const std::string& chromosome);
 
   /**
    * Calculate the undistinguished counts
@@ -98,6 +132,12 @@ private:
    */
   void readSamplesList(const std::string& inFileRoot);
 
+  /**
+   * Check that readHaps parsed a record for every site counted by countHapLines.
+   * @throws std::runtime_error naming the first site that could not be read
+   */
+  void requireAllSitesRead(unsigned long sitesRead) const;
+
   /// Read haplotypes for ASMC, which always loads every sample.
   void readHaps(std::string inFileRoot, bool foldToMinorAlleles);
 
@@ -126,6 +166,11 @@ private:
   std::vector<int> derivedAlleleCounts;
   std::vector<std::string> SNP_IDs;
 
+  /**
+   * Draw `sampleSize` items without replacement from `populationSize` items, `numberOfSuccesses` of which are
+   * successes, and return how many successes were drawn. Returns -1 if the draw is impossible: more successes or more
+   * draws than items. When the CSFS is not used, the draw can be larger than the population.
+   */
   static int sampleHypergeometric(int populationSize, int numberOfSuccesses, int sampleSize);
 
 

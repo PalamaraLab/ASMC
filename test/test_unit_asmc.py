@@ -93,15 +93,18 @@ class TestASMCDecodingParams(unittest.TestCase):
 
     def test_with_explicit_map_file(self):
 
-        # Copy the map file to a temporary directory
+        # Copy the input to a temporary directory without its map, and the map elsewhere under another name, so the
+        # data can only be read if map_file is used
         temp_dir = pathlib.Path(tempfile.mkdtemp())
-        mapFile = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300.map.gz')
-        shutil.copy(mapFile, temp_dir / 'exampleFile.n300.map.gz')
+        example_root = data_dir / 'examples' / 'asmc' / 'exampleFile.n300.array'
+        shutil.copy(f'{example_root}.hap.gz', temp_dir / 'input.hap.gz')
+        shutil.copy(f'{example_root}.samples', temp_dir / 'input.samples')
+        shutil.copy(f'{example_root}.map.gz', temp_dir / 'another_name.map.gz')
 
-        inFileRoot = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300.array')
+        inFileRoot = str(temp_dir / 'input')
         decodingQuantFile = str(data_dir / 'decoding_quantities' / '30-100-2000_CEU.decodingQuantities.gz')
         params = DecodingParams(inFileRoot, decodingQuantFile, compress=True,
-                                skip_CSFS_distance=float('nan'), map_file=str(temp_dir / 'exampleFile.n300.map.gz'))
+                                skip_CSFS_distance=float('nan'), map_file=str(temp_dir / 'another_name.map.gz'))
 
         self.assertEqual(params.compress, True)
         self.assertEqual(params.skipCSFSdistance, float('inf'))
