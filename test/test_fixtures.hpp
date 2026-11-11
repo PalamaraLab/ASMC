@@ -20,13 +20,19 @@
 #include "DecodePairsReturnStruct.hpp"
 #include "DecodingParams.hpp"
 #include "HMM.hpp"
+#include "HmmUtils.hpp"
 
 #include <Eigen/Core>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -223,6 +229,88 @@ inline DecodePairsReturnStruct makeDecodePairsReturnStruct(const std::vector<uns
   result.initialise(hapIndicesA, hapIndicesB, numSites, numStates, storeFullPosteriors, storeSumOfPosteriors,
                     storePerPairPosteriors, storePerPairMaps);
   return result;
+}
+
+/// Posteriors from HMM::decode, indexed [state][site] over the whole chromosome.
+using ReferencePosterior = std::vector<std::vector<float>>;
+
+/**
+ * Decode haplotype pairs with the batched (SIMD) path, the way ASMC::ASMC::decodePairs does, and return a copy of
+ * the results.
+ *
+ * Stores, for each pair, the full posterior, the posterior mean and the MAP over the window [from, to). Burn-in
+ * sites are decoded but not stored. The HMM's batch buffer is empty on return.
+ *
+ * @param hmm the HMM to decode with; its per-pair storage options are switched on
+ * @param hapsA haplotype indices of the first member of each pair
+ * @param hapsB haplotype indices of the second member of each pair, the same length as hapsA
+ * @param from first site of the window
+ * @param to one past the last site of the window
+ * @param cmBurnIn genetic distance decoded either side of the window; must be positive
+ */
+inline DecodePairsReturnStruct decodeBatched(HMM& hmm, const std::vector<unsigned long>& hapsA,
+                                             const std::vector<unsigned long>& hapsB, unsigned from, unsigned to,
+                                             float cmBurnIn)
+{
+  hmm.setStorePerPairPosterior(true);
+  hmm.setStorePerPairPosteriorMean(true);
+  hmm.setStorePerPairMap(true);
+
+  const auto windowLength = static_cast<long int>(to - from);
+  const auto numStates = static_cast<long int>(hmm.getDecodingQuantities().states);
+  hmm.getDecodePairsReturnStruct().initialise(hapsA, hapsB, windowLength, numStates, /*_fullPosteriors=*/true,
+                                              /*_sumOfPosteriors=*/false, /*_perPairPosteriors=*/true,
+                                              /*_perPairMAPs=*/true);
+  hmm.decodeHapPairs(hapsA, hapsB, from, to, cmBurnIn);
+  hmm.finishDecoding();
+  return hmm.getDecodePairsReturnStruct();
+}
+
+/**
+ * Decode one haplotype pair with the non-batched, scalar path (HMM::decode) over sites [from, to), with no burn-in.
+ *
+ * This path runs the same recursions as the batched path, with plain loops instead of SIMD kernels, so it serves as
+ * a reference for it. Only columns [from, to) of the result are meaningful.
+ */
+inline ReferencePosterior decodeReference(HMM& hmm, unsigned long hapA, unsigned long hapB, unsigned from, unsigned to)
+{
+  const auto [indA, haplotypeA] = asmc::hapToDipId(hapA);
+  const auto [indB, haplotypeB] = asmc::hapToDipId(hapB);
+  const PairObservations observations =
+      hmm.makePairObs(static_cast<int_least8_t>(haplotypeA), static_cast<unsigned>(indA),
+                      static_cast<int_least8_t>(haplotypeB), static_cast<unsigned>(indB));
+  return hmm.decode(observations, from, to);
+}
+
+/**
+ * Largest absolute difference between a batched posterior and the matching columns of a reference posterior.
+ *
+ * @param batched a (states x window sites) posterior, as stored in DecodePairsReturnStruct::perPairPosteriors
+ * @param reference a posterior from decodeReference
+ * @param windowStart the chromosome site that column 0 of `batched` corresponds to
+ * @return the maximum difference, or infinity if the shapes are incompatible or any value is NaN
+ */
+inline float maxAbsPosteriorDifference(const RowMajorPosterior& batched, const ReferencePosterior& reference,
+                                       unsigned windowStart)
+{
+  if (static_cast<std::size_t>(batched.rows()) != reference.size() ||
+      windowStart + static_cast<std::size_t>(batched.cols()) > reference.front().size()) {
+    return std::numeric_limits<float>::infinity();
+  }
+
+  float maxDifference = 0.f;
+  for (Eigen::Index state = 0; state < batched.rows(); ++state) {
+    for (Eigen::Index offset = 0; offset < batched.cols(); ++offset) {
+      const float referenceValue = reference.at(state).at(windowStart + offset);
+      const float difference = std::abs(batched(state, offset) - referenceValue);
+      // std::max would silently drop a NaN, letting a broken posterior pass
+      if (std::isnan(difference)) {
+        return std::numeric_limits<float>::infinity();
+      }
+      maxDifference = std::max(maxDifference, difference);
+    }
+  }
+  return maxDifference;
 }
 
 } // namespace asmc::test

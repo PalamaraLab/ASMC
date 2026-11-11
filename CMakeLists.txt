@@ -133,6 +133,7 @@ set(ASMC_unit_tests
         ${ASMC_test_dir}/test_binary_data_reader.cpp
         ${ASMC_test_dir}/test_hashing.cpp
         ${ASMC_test_dir}/test_HMM.cpp
+        ${ASMC_test_dir}/test_hmm_posteriors.cpp
         ${ASMC_test_dir}/test_hmm_utils.cpp
         ${ASMC_test_dir}/test_string_utils.cpp
         ${ASMC_test_dir}/test_test_fixtures.cpp
@@ -271,7 +272,8 @@ if (ASMC_TESTING)
 
     add_executable(ASMC_unit_tests ${ASMC_unit_tests})
     target_include_directories(ASMC_unit_tests PRIVATE ${ASMC_test_dir})
-    target_link_libraries(ASMC_unit_tests PRIVATE ASMC fmt::fmt Catch2::Catch2WithMain)
+    # hwy: test_hmm_posteriors.cpp restricts Highway's dynamic dispatch to each SIMD target in turn
+    target_link_libraries(ASMC_unit_tests PRIVATE ASMC fmt::fmt Catch2::Catch2WithMain hwy)
     catch_discover_tests(
             ASMC_unit_tests
             TEST_PREFIX "unit:"
