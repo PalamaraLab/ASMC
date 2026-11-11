@@ -7,19 +7,35 @@ on:
   pull_request:
     branches:
       - main
+    types: [opened, synchronize, reopened, labeled]
   release:
     types:
       - published
+  schedule:
+    - cron: '0 4 * * 1'  # Every Monday at 04:00 UTC
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Cancel a PR's previous run when a new commit is pushed. A run started by adding a label waits
+# instead of cancelling, so labelling a PR never cancels a full-ci run already in progress.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
+
 jobs:
   build_wheels_cloud:
     name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    if: github.event_name == 'pull_request' || github.repository == 'PalamaraLab/ASMC'
+    # Minutes are billed on the private repo (macOS at about 10x Linux), so this runs there only
+    # for PRs labelled full-ci or on manual dispatch. The public repo runs it for every event.
+    # Adding any other label is ignored.
+    if: >-
+      (github.event.action != 'labeled' || github.event.label.name == 'full-ci')
+      && (github.repository == 'PalamaraLab/ASMC'
+          || github.event_name == 'workflow_dispatch'
+          || contains(github.event.pull_request.labels.*.name, 'full-ci'))
     strategy:
       fail-fast: false
       matrix:

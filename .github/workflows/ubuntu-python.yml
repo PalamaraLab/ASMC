@@ -4,25 +4,49 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'docs/**'
+      - 'notebooks/**'
+      - '**.md'
+      - '.readthedocs.yaml'
   pull_request:
     branches:
       - '**'
+    paths-ignore:
+      - 'docs/**'
+      - 'notebooks/**'
+      - '**.md'
+      - '.readthedocs.yaml'
+  schedule:
+    - cron: '0 4 * * 1'  # Every Monday at 04:00 UTC
   workflow_dispatch:
 
 permissions:
   contents: read
+
+# Cancel a PR's previous run when a new commit is pushed. Other events are grouped by commit SHA,
+# so pushes to main never cancel each other.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
 
   build-and-test:
     name: Unit tests via Python on Ubuntu
     runs-on: ubuntu-24.04
-    if: ${{ github.event_name == 'pull_request' || github.repository == 'PalamaraLab/ASMC' }}
+    # Runs on every PR in the private repo; on the public repo it runs for every event.
+    if: >-
+      github.repository == 'PalamaraLab/ASMC'
+      || github.event_name == 'pull_request'
+      || github.event_name == 'workflow_dispatch'
     timeout-minutes: 10
 
     strategy:
       matrix:
-        python-version: ["3.10", "3.14"]
+        # Oldest and newest supported versions on the public repo. The private repo's minutes are
+        # billed, so it tests only the newest.
+        python-version: ${{ fromJSON(github.repository == 'PalamaraLab/ASMC' && '["3.10", "3.14"]' || '["3.14"]') }}
 
     steps:
       - name: checkout repo & submodules
