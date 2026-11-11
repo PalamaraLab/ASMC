@@ -13,14 +13,16 @@
 //    You should have received a copy of the GNU General Public License
 //    along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
-
+#include <cstddef>
 #include <exception>
 #include <iostream>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
 #include <boost/algorithm/string.hpp>
+#include <fmt/core.h>
 
 #include "FileUtils.hpp"
 #include "StringUtils.hpp"
@@ -29,6 +31,30 @@
 #include "DecodingQuantities.hpp"
 
 using namespace std;
+
+namespace
+{
+
+/// Throw if a section of the decoding quantities file appears before the values it depends on have been parsed.
+void requireParsedBefore(const bool prerequisitesParsed, const std::string& section, const std::string& prerequisites)
+{
+  if (!prerequisitesParsed) {
+    throw std::runtime_error(fmt::format("ERROR. Parsed {} before parsing {}.", section, prerequisites));
+  }
+}
+
+/// Throw if a row of a section of the decoding quantities file has the wrong number of entries. `line`, if given, is
+/// quoted in the message.
+void requireEntryCount(const std::size_t parsedEntries, const std::size_t expectedEntries, const std::string& section,
+                       const std::string& line = "")
+{
+  if (parsedEntries != expectedEntries) {
+    throw std::runtime_error(fmt::format("ERROR. Parsed {} {} entries, but expected {}{}", parsedEntries, section,
+                                         expectedEntries, line.empty() ? "." : ": " + line));
+  }
+}
+
+} // namespace
 
 DecodingQuantities::DecodingQuantities(const std::string& fileName) {
   validateDecodingQuantitiesFile(fileName);
@@ -109,17 +135,11 @@ void DecodingQuantities::createFromGzippedText(const std::string& fileName) {
       continue;
     } else if (firstToken == string("expectedtimes")) {
       currentType = DataType::ExpectedTimes;
-      if (!parsedStates) {
-        cerr << "ERROR. Parsed " << int(currentType) << " before parsing states." << endl;
-        exit(1);
-      }
+      requireParsedBefore(parsedStates, "ExpectedTimes", "states");
       getline(br, line);
       vector <string> inSplitString; istringstream iss(line); string buf; while (iss >> buf) inSplitString.push_back(buf);
       expectedTimes = vector <float> (inSplitString.size());
-      if (inSplitString.size() != states) {
-        cerr << "ERROR. Parsed " << inSplitString.size() + " ExpectedTimes entries for " << states << " states." << endl;
-        exit(1);
-      }
+      requireEntryCount(inSplitString.size(), states, "ExpectedTimes");
       for (unsigned int i = 0; i < inSplitString.size(); i++) {
         expectedTimes[i] = StringUtils::stof(inSplitString[i]);
       }
@@ -127,17 +147,11 @@ void DecodingQuantities::createFromGzippedText(const std::string& fileName) {
       continue;
     } else if (firstToken == string("discretization")) {
       currentType = DataType::Discretization;
-      if (!parsedStates) {
-        cerr << "ERROR. Parsed " << int(currentType) << " before parsing states." << endl;
-        exit(1);
-      }
+      requireParsedBefore(parsedStates, "Discretization", "states");
       getline(br, line);
       discretization = vector <float> (states + 1);
       vector <string> inSplitString; istringstream iss(line); string buf; while (iss >> buf) inSplitString.push_back(buf);
-      if (inSplitString.size() != states + 1) {
-        cerr << "ERROR. Parsed " << inSplitString.size() + " Discretization entries for " << states << " states." << endl;
-        exit(1);
-      }
+      requireEntryCount(inSplitString.size(), states + 1, "Discretization");
       for (unsigned int i = 0; i < inSplitString.size(); i++) {
         discretization[i] = StringUtils::stof(inSplitString[i]);
       }
@@ -145,18 +159,12 @@ void DecodingQuantities::createFromGzippedText(const std::string& fileName) {
       continue;
     } else if (firstToken == string("classicemission")) {
       currentType = DataType::ClassicEmission;
-      if (!parsedStates) {
-        cerr << "ERROR. Parsed " << int(currentType) << " before parsing states." << endl;
-        exit(1);
-      }
+      requireParsedBefore(parsedStates, "ClassicEmission", "states");
       classicEmissionTable = vector < vector <float> > (2);
       for (int k = 0; k < 2; k++) {
         getline(br, line);
         vector <string> inSplitString; istringstream iss(line); string buf; while (iss >> buf) inSplitString.push_back(buf);
-        if (inSplitString.size() != states) {
-          cerr << "ERROR. Parsed " << inSplitString.size() + " ClassicEmission entries for " << states << " states." << endl;
-          exit(1);
-        }
+        requireEntryCount(inSplitString.size(), states, "ClassicEmission");
         vector <float> thisEmission = vector <float> (states);
         for (unsigned int i = 0; i < states; i++) {
           thisEmission[i] = StringUtils::stof(inSplitString[i]);
@@ -167,18 +175,12 @@ void DecodingQuantities::createFromGzippedText(const std::string& fileName) {
       continue;
     } else if (firstToken == string("compressedascertainedemission")) {
       currentType = DataType::CompressedAscertainedEmission;
-      if (!parsedStates) {
-        cerr << "ERROR. Parsed " << int(currentType) << " before parsing states." << endl;
-        exit(1);
-      }
+      requireParsedBefore(parsedStates, "CompressedAscertainedEmission", "states");
       compressedEmissionTable = vector < vector <float> > (2);
       for (int k = 0; k < 2; k++) {
         getline(br, line);
         vector <string> inSplitString; istringstream iss(line); string buf; while (iss >> buf) inSplitString.push_back(buf);
-        if (inSplitString.size() != states) {
-          cerr << "ERROR. Parsed " << inSplitString.size() + " CompressedAscertainedEmission entries for " << states << " states." << endl;
-          exit(1);
-        }
+        requireEntryCount(inSplitString.size(), states, "CompressedAscertainedEmission");
         vector <float> thisEmission = vector <float> (states);
         for (unsigned int i = 0; i < states; i++) {
           thisEmission[i] = StringUtils::stof(inSplitString[i]);
@@ -189,19 +191,13 @@ void DecodingQuantities::createFromGzippedText(const std::string& fileName) {
       continue;
     } else if (firstToken == string("csfs")) {
       currentType = DataType::CSFS;
-      if (!parsedStates || !parsedCSFSSamples) {
-        cerr << "ERROR. Parsed " << int(currentType) << " before parsing states and number of CSFS samples." << endl;
-        exit(1);
-      }
+      requireParsedBefore(parsedStates && parsedCSFSSamples, "CSFS", "states and number of CSFS samples");
       int undistinguishedIndex = std::stoi(splitString[1]);
       vector < vector <float> > thisCSFS = vector < vector <float> > ();
       for (int k = 0; k < 3; k++) {
         getline(br, line);
         vector <string> inSplitString; istringstream iss(line); string buf; while (iss >> buf) inSplitString.push_back(buf);
-        if (inSplitString.size() != states) {
-          cerr << "ERROR. Parsed " << inSplitString.size() + " CSFS entries for " << states << " states: " << line << endl;
-          exit(1);
-        }
+        requireEntryCount(inSplitString.size(), states, "CSFS", line);
         vector <float> CSFSline = vector <float> (states);
         thisCSFS.push_back(CSFSline);
         for (unsigned int i = 0; i < states; i++) {
@@ -213,19 +209,13 @@ void DecodingQuantities::createFromGzippedText(const std::string& fileName) {
       continue;
     } else if (firstToken == string("foldedcsfs")) {
       currentType = DataType::FoldedCSFS;
-      if (!parsedStates || !parsedCSFSSamples) {
-        cerr << "ERROR. Parsed " << int(currentType) << " before parsing states and number of CSFS samples." << endl;
-        exit(1);
-      }
+      requireParsedBefore(parsedStates && parsedCSFSSamples, "FoldedCSFS", "states and number of CSFS samples");
       int undistinguishedIndex = std::stoi(splitString[1]);
       vector < vector <float> > thisCSFS = vector < vector <float> > ();
       for (int k = 0; k < 2; k++) {
         getline(br, line);
         vector <string> inSplitString; istringstream iss(line); string buf; while (iss >> buf) inSplitString.push_back(buf);
-        if (inSplitString.size() != states) {
-          cerr << "ERROR. Parsed " << inSplitString.size() + " FoldedCSFS entries for " << states << " states: " << line << endl;
-          exit(1);
-        }
+        requireEntryCount(inSplitString.size(), states, "FoldedCSFS", line);
         vector <float> CSFSline = vector <float> (states);
         thisCSFS.push_back(CSFSline);
         for (unsigned int i = 0; i < states; i++) {
@@ -236,19 +226,13 @@ void DecodingQuantities::createFromGzippedText(const std::string& fileName) {
       continue;
     } else if (firstToken == string("ascertainedcsfs")) {
       currentType = DataType::AscertainedCSFS;
-      if (!parsedStates || !parsedCSFSSamples) {
-        cerr << "ERROR. Parsed " << int(currentType) << " before parsing states and number of CSFS samples." << endl;
-        exit(1);
-      }
+      requireParsedBefore(parsedStates && parsedCSFSSamples, "AscertainedCSFS", "states and number of CSFS samples");
       int undistinguishedIndex = std::stoi(splitString[1]);
       vector < vector <float> > thisCSFS = vector < vector <float> > ();
       for (int k = 0; k < 3; k++) {
         getline(br, line);
         vector <string> inSplitString; istringstream iss(line); string buf; while (iss >> buf) inSplitString.push_back(buf);
-        if (inSplitString.size() != states) {
-          cerr << "ERROR. Parsed " << inSplitString.size() + " AscertainedCSFS entries for " << states << " states: " << line << endl;
-          exit(1);
-        }
+        requireEntryCount(inSplitString.size(), states, "AscertainedCSFS", line);
         vector <float> CSFSline = vector <float> (states);
         thisCSFS.push_back(CSFSline);
         for (unsigned int i = 0; i < states; i++) {
@@ -259,19 +243,14 @@ void DecodingQuantities::createFromGzippedText(const std::string& fileName) {
       continue;
     } else if (firstToken == string("foldedascertainedcsfs")) {
       currentType = DataType::FoldedAscertainedCSFS;
-      if (!parsedStates || !parsedCSFSSamples) {
-        cerr << "ERROR. Parsed " << int(currentType) << " before parsing states and number of CSFS samples." << endl;
-        exit(1);
-      }
+      requireParsedBefore(parsedStates && parsedCSFSSamples, "FoldedAscertainedCSFS",
+                          "states and number of CSFS samples");
       int undistinguishedIndex = std::stoi(splitString[1]);
       vector < vector <float> > thisCSFS = vector < vector <float> > ();
       for (int k = 0; k < 2; k++) {
         getline(br, line);
         vector <string> inSplitString; istringstream iss(line); string buf; while (iss >> buf) inSplitString.push_back(buf);
-        if (inSplitString.size() != states) {
-          cerr << "ERROR. Parsed " << inSplitString.size() + " FoldedAscertainedCSFS entries for " << states << " states: " << line << endl;
-          exit(1);
-        }
+        requireEntryCount(inSplitString.size(), states, "FoldedAscertainedCSFS", line);
         vector <float> CSFSline = vector <float> (states);
         thisCSFS.push_back(CSFSline);
         for (unsigned int i = 0; i < states; i++) {

@@ -14,6 +14,7 @@
 //    along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <cstdlib>
+#include <exception>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -30,7 +31,10 @@
 
 using namespace std;
 
-int main(int argc, char* argv[])
+namespace
+{
+
+int runAsmc(int argc, char* argv[])
 {
 
   srand(1234);
@@ -164,5 +168,19 @@ int main(int argc, char* argv[])
     fout11.close();
 
     cout << "Done.\n\n";
+  }
+  return 0;
+}
+
+} // namespace
+
+// Library code reports invalid input by throwing; report it here rather than letting std::terminate abort.
+int main(int argc, char* argv[])
+{
+  try {
+    return runAsmc(argc, argv);
+  } catch (const std::exception& e) {
+    cerr << e.what() << '\n';
+    return 1;
   }
 }
