@@ -51,13 +51,13 @@ jobs:
 
       - name: test
         run: |
-          ctest -j2 -R Asmc_unit_tests --output-on-failure
+          ctest -j2 -R '^unit:' --output-on-failure
         working-directory: build_dir
 
       - name: process coverage
         run: |
           lcov --directory . --capture --output-file coverage.info
-          lcov --remove coverage.info '/usr/*' '*/test/*' --output-file coverage.info
+          lcov --remove coverage.info '/usr/*' '*/test/*' '*/_deps/*' --output-file coverage.info
           lcov --list coverage.info
         working-directory: build_dir
 
