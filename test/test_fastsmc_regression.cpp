@@ -13,32 +13,36 @@
 //    You should have received a copy of the GNU General Public License
 //    along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
-#include <catch2/catch_approx.hpp>
+// FastSMC regression tests: each runs FastSMC on the example data under one configuration and compares the IBD output
+// with a snapshot. See regression_snapshots.hpp for how to regenerate the snapshots.
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <string>
 #include <vector>
 
-#include "utils/StringUtils.hpp"
-
+#include "BinaryDataReader.hpp"
 #include "DecodingParams.hpp"
 #include "FastSMC.hpp"
-#include "FileUtils.hpp"
-#include "Simd.hpp"
-#include "Timer.hpp"
+#include "regression_snapshots.hpp"
+#include "test_fixtures.hpp"
 
-using Catch::Approx;
-
-TEST_CASE("test FastSMC with hashing regression test", "[FastSMC_regression]")
+namespace
 {
-  // This test is designed to work with AVX2. It may work with other SIMD instruction sets, but it is possible that
-  // the test could fail with minor numerical differences.
-  asmc::warnIfSimdMismatch("AVX2");
 
+using asmc::test::checkLinesMatchSnapshot;
+using asmc::test::floatOutput;
+
+/**
+ * FastSMC parameters shared by the regression tests: the example data, hashing on, per-segment age estimates and
+ * segment lengths on. Output goes to `outFileRoot`. Callers adjust these and then call validateParamsFastSMC.
+ */
+DecodingParams fastSmcParams(const std::string& outFileRoot)
+{
   DecodingParams params;
   params.decodingQuantFile = ASMC_DATA_DIR "/decoding_quantities/10-20-2000_CEU.decodingQuantities.gz";
   params.inFileRoot = ASMC_DATA_DIR "/examples/fastsmc/example";
-  params.outFileRoot = "/tmp/FastSMC";
+  params.outFileRoot = outFileRoot;
   params.decodingModeString = "array";
   params.usingCSFS = true;
   params.batchSize = 32;
@@ -54,246 +58,90 @@ TEST_CASE("test FastSMC with hashing regression test", "[FastSMC_regression]")
   params.doPerPairPosteriorMean = true;
   params.useKnownSeed = true;
   params.hashingOnly = false;
-
-  params.validateParamsFastSMC();
-
-  ASMC::FastSMC fastSMC(params);
-  fastSMC.run();
-
-  SECTION("regression test")
-  {
-    const auto expectedNumLines = 1587ul;
-
-    // Read lines from existing regression test output into a vector of strings
-    std::vector<std::string> regressionLines;
-    regressionLines.reserve(expectedNumLines);
-    {
-      FileUtils::AutoGzIfstream fin_regression;
-      fin_regression.openOrExit(ASMC_DATA_DIR "/testing/fastsmc/regression/regression_output.ibd.gz");
-      for (std::string f_line; getline(fin_regression, f_line);) {
-        regressionLines.emplace_back(f_line);
-      }
-      fin_regression.close();
-    }
-
-    // Read lines from generated test output into a vector of strings
-    std::vector<std::string> generatedLines;
-    generatedLines.reserve(expectedNumLines);
-    {
-      FileUtils::AutoGzIfstream fin_generated;
-      fin_generated.openOrExit(params.outFileRoot + ".1.1.FastSMC.ibd.gz");
-      for (std::string f_line; getline(fin_generated, f_line);) {
-        generatedLines.emplace_back(f_line);
-      }
-      fin_generated.close();
-    }
-
-    REQUIRE(regressionLines.size() == expectedNumLines);
-    REQUIRE(regressionLines.size() == generatedLines.size());
-
-    for (auto lineNum = 0ul; lineNum < regressionLines.size(); ++lineNum) {
-      auto reg_split = asmc::splitTextByDelimiter(regressionLines.at(lineNum), "\t");
-      auto gen_split = asmc::splitTextByDelimiter(generatedLines.at(lineNum), "\t");
-
-      CHECK(reg_split.size() == 13ul);
-      CHECK(gen_split.size() == 13ul);
-
-      // Check the string fields
-      CHECK(reg_split.at(0) == gen_split.at(0));
-      CHECK(reg_split.at(1) == gen_split.at(1));
-      CHECK(reg_split.at(3) == gen_split.at(3));
-      CHECK(reg_split.at(4) == gen_split.at(4));
-
-      // Check the integer fields
-      CHECK(std::stoul(reg_split.at(2)) == std::stoul(gen_split.at(2)));
-      CHECK(std::stoul(reg_split.at(5)) == std::stoul(gen_split.at(5)));
-      CHECK(std::stoul(reg_split.at(6)) == std::stoul(gen_split.at(6)));
-      CHECK(std::stoul(reg_split.at(7)) == std::stoul(gen_split.at(7)));
-      CHECK(std::stoul(reg_split.at(8)) == std::stoul(gen_split.at(8)));
-
-      // Check the float fields
-      CHECK(std::stold(reg_split.at(9)) == Approx(std::stold(gen_split.at(9))).epsilon(0.001));
-      CHECK(std::stold(reg_split.at(10)) == Approx(std::stold(gen_split.at(10))).epsilon(0.001));
-      CHECK(std::stold(reg_split.at(11)) == Approx(std::stold(gen_split.at(11))).epsilon(0.001));
-      CHECK(std::stold(reg_split.at(12)) == Approx(std::stold(gen_split.at(12))).epsilon(0.001));
-    }
-  }
+  return params;
 }
 
-TEST_CASE("test FastSMC with hashing only (GERMLINE2)", "[FastSMC_regression]")
+/// Path of the output FastSMC writes for `params`, in text or binary form.
+std::string outputPath(const DecodingParams& params)
 {
-  // This test is designed to work with AVX2. It may work with other SIMD instruction sets, but it is possible that
-  // the test could fail with minor numerical differences.
-  asmc::warnIfSimdMismatch("AVX2");
+  return params.outFileRoot + "." + std::to_string(params.jobInd) + "." + std::to_string(params.jobs) +
+         (params.BIN_OUT ? ".FastSMC.bibd.gz" : ".FastSMC.ibd.gz");
+}
 
-  DecodingParams params;
-  params.decodingQuantFile = ASMC_DATA_DIR "/decoding_quantities/10-20-2000_CEU.decodingQuantities.gz";
-  params.inFileRoot = ASMC_DATA_DIR "/examples/fastsmc/example";
-  params.outFileRoot = "/tmp/FastSMCHashing";
-  params.decodingModeString = "array";
-  params.usingCSFS = true;
-  params.batchSize = 32;
-  params.recallThreshold = 3;
-  params.min_m = 1.5;
-  params.hashing = true;
-  params.FastSMC = true;
-  params.BIN_OUT = false;
+/// Validate `params`, run FastSMC, and return its text output, one line per IBD segment.
+std::vector<std::string> runFastSmc(DecodingParams params)
+{
+  params.validateParamsFastSMC();
+  ASMC::FastSMC fastSMC(params);
+  fastSMC.run();
+  return asmc::test::readLines(outputPath(params));
+}
+
+/// FastSMC without hashing, for job 8 of 400: 113 pairs, so the last batch of 32 is padded.
+DecodingParams noHashingJobParams(const std::string& outFileRoot)
+{
+  DecodingParams params = fastSmcParams(outFileRoot);
+  params.hashing = false;
+  params.jobs = 400;
+  params.jobInd = 8;
+  return params;
+}
+
+} // namespace
+
+TEST_CASE("FastSMC regression: hashing", "[FastSMC_regression]")
+{
+  const asmc::test::TempDirectory temp;
+  checkLinesMatchSnapshot(runFastSmc(fastSmcParams(temp.file("out").string())), "fastsmc_hashing.ibd.gz", floatOutput);
+}
+
+TEST_CASE("FastSMC regression: hashing only", "[FastSMC_regression]")
+{
+  const asmc::test::TempDirectory temp;
+  DecodingParams params = fastSmcParams(temp.file("out").string());
+  params.hashingOnly = true;
   params.outputIbdSegmentLength = false;
-  params.time = 50;
-  params.noConditionalAgeEstimates = true;
   params.doPerPairMAP = false;
   params.doPerPairPosteriorMean = false;
-  params.useKnownSeed = true;
-  params.hashingOnly = true;
-
-  params.validateParamsFastSMC();
-
-  ASMC::FastSMC fastSMC(params);
-  fastSMC.run();
-
-  SECTION("regression test")
-  {
-    const auto expectedNumLines = 495ul;
-
-    // Read lines from existing regression test output into a vector of strings
-    std::vector<std::string> regressionLines;
-    regressionLines.reserve(expectedNumLines);
-    {
-      FileUtils::AutoGzIfstream fin_regression;
-      fin_regression.openOrExit(ASMC_DATA_DIR "/testing/fastsmc/regression/regression_output_hashing.ibd.gz");
-      for (std::string f_line; getline(fin_regression, f_line);) {
-        regressionLines.emplace_back(f_line);
-      }
-      fin_regression.close();
-    }
-
-    // Read lines from generated test output into a vector of strings
-    std::vector<std::string> generatedLines;
-    generatedLines.reserve(expectedNumLines);
-    {
-      FileUtils::AutoGzIfstream fin_generated;
-      fin_generated.openOrExit(params.outFileRoot + ".1.1.FastSMC.ibd.gz");
-      for (std::string f_line; getline(fin_generated, f_line);) {
-        generatedLines.emplace_back(f_line);
-      }
-      fin_generated.close();
-    }
-
-    REQUIRE(regressionLines.size() == expectedNumLines);
-    REQUIRE(regressionLines.size() == generatedLines.size());
-
-    for (auto lineNum = 0ul; lineNum < regressionLines.size(); ++lineNum) {
-      auto reg_split = asmc::splitTextByDelimiter(regressionLines.at(lineNum), "\t");
-      auto gen_split = asmc::splitTextByDelimiter(generatedLines.at(lineNum), "\t");
-
-      CHECK(reg_split.size() == 9ul);
-      CHECK(gen_split.size() == 9ul);
-
-      // Check the string fields
-      CHECK(reg_split.at(0) == gen_split.at(0));
-      CHECK(reg_split.at(1) == gen_split.at(1));
-      CHECK(reg_split.at(3) == gen_split.at(3));
-      CHECK(reg_split.at(4) == gen_split.at(4));
-
-      // Check the integer fields
-      CHECK(std::stoul(reg_split.at(2)) == std::stoul(gen_split.at(2)));
-      CHECK(std::stoul(reg_split.at(5)) == std::stoul(gen_split.at(5)));
-      CHECK(std::stoul(reg_split.at(6)) == std::stoul(gen_split.at(6)));
-      CHECK(std::stoul(reg_split.at(7)) == std::stoul(gen_split.at(7)));
-      CHECK(std::stoul(reg_split.at(8)) == std::stoul(gen_split.at(8)));
-    }
-  }
+  checkLinesMatchSnapshot(runFastSmc(params), "fastsmc_hashing_only.ibd.gz", floatOutput);
 }
 
-
-TEST_CASE("test FastSMC without hashing regression test", "[FastSMC_regression]")
+TEST_CASE("FastSMC regression: no hashing, one job", "[FastSMC_regression]")
 {
-  // This test is designed to work with AVX2. It may work with other SIMD instruction sets, but it is possible that
-  // the test could fail with minor numerical differences.
-  asmc::warnIfSimdMismatch("AVX2");
+  const asmc::test::TempDirectory temp;
+  checkLinesMatchSnapshot(runFastSmc(noHashingJobParams(temp.file("out").string())), "fastsmc_no_hashing_job.ibd.gz",
+                          floatOutput);
+}
 
-  DecodingParams params;
-  params.decodingQuantFile = ASMC_DATA_DIR "/decoding_quantities/10-20-2000_CEU.decodingQuantities.gz";
-  params.inFileRoot = ASMC_DATA_DIR "/examples/fastsmc/example";
-  params.outFileRoot = "/tmp/FastSMCresults";
-  params.decodingModeString = "array";
-  params.usingCSFS = true;
-  params.batchSize = 32;
-  params.recallThreshold = 3;
-  params.min_m = 1.5;
-  params.hashing = false;
-  params.FastSMC = true;
-  params.BIN_OUT = false;
-  params.outputIbdSegmentLength = true;
-  params.time = 50;
-  params.noConditionalAgeEstimates = true;
-  params.doPerPairMAP = true;
-  params.doPerPairPosteriorMean = true;
-  params.jobInd = 7;
-  params.jobs = 25;
-  params.useKnownSeed = true;
+TEST_CASE("FastSMC regression: hashing, one job of several, conditional age estimates", "[FastSMC_regression]")
+{
+  // Job 2 of 4 compares the second window of samples with the first
+  const asmc::test::TempDirectory temp;
+  DecodingParams params = fastSmcParams(temp.file("out").string());
+  params.jobs = 4;
+  params.jobInd = 2;
+  params.noConditionalAgeEstimates = false;
+  checkLinesMatchSnapshot(runFastSmc(params), "fastsmc_hashing_job_conditional.ibd.gz", floatOutput);
+}
 
+TEST_CASE("FastSMC regression: binary output matches text output", "[FastSMC_regression]")
+{
+  // Same configuration as "no hashing, one job", but writing binary output, read back with BinaryDataReader
+  const asmc::test::TempDirectory temp;
+  DecodingParams params = noHashingJobParams(temp.file("out").string());
+  params.BIN_OUT = true;
   params.validateParamsFastSMC();
-
   ASMC::FastSMC fastSMC(params);
   fastSMC.run();
 
-  SECTION("regression test")
-  {
-    const auto expectedNumLines = 498ul;
+  std::vector<std::string> lines;
+  BinaryDataReader reader(outputPath(params));
+  while (reader.moreLinesInFile()) {
+    lines.push_back(reader.getNextLine().toString());
+  }
 
-    // Read lines from existing regression test output into a vector of strings
-    std::vector<std::string> regressionLines;
-    regressionLines.reserve(expectedNumLines);
-    {
-      FileUtils::AutoGzIfstream fin_regression;
-      fin_regression.openOrExit(ASMC_DATA_DIR "/testing/fastsmc/regression/regression_output_no_hashing.ibd.gz");
-      for (std::string f_line; getline(fin_regression, f_line);) {
-        regressionLines.emplace_back(f_line);
-      }
-      fin_regression.close();
-    }
-
-    // Read lines from generated test output into a vector of strings
-    std::vector<std::string> generatedLines;
-    generatedLines.reserve(expectedNumLines);
-    {
-      FileUtils::AutoGzIfstream fin_generated;
-      fin_generated.openOrExit(params.outFileRoot + ".7.25.FastSMC.ibd.gz");
-      for (std::string f_line; getline(fin_generated, f_line);) {
-        generatedLines.emplace_back(f_line);
-      }
-      fin_generated.close();
-    }
-
-    REQUIRE(regressionLines.size() == expectedNumLines);
-    REQUIRE(regressionLines.size() == generatedLines.size());
-
-    for (auto lineNum = 0ul; lineNum < regressionLines.size(); ++lineNum) {
-      auto reg_split = asmc::splitTextByDelimiter(regressionLines.at(lineNum), "\t");
-      auto gen_split = asmc::splitTextByDelimiter(generatedLines.at(lineNum), "\t");
-
-      CHECK(reg_split.size() == 13ul);
-      CHECK(gen_split.size() == 13ul);
-
-      // Check the string fields
-      CHECK(reg_split.at(0) == gen_split.at(0));
-      CHECK(reg_split.at(1) == gen_split.at(1));
-      CHECK(reg_split.at(3) == gen_split.at(3));
-      CHECK(reg_split.at(4) == gen_split.at(4));
-
-      // Check the integer fields
-      CHECK(std::stoul(reg_split.at(2)) == std::stoul(gen_split.at(2)));
-      CHECK(std::stoul(reg_split.at(5)) == std::stoul(gen_split.at(5)));
-      CHECK(std::stoul(reg_split.at(6)) == std::stoul(gen_split.at(6)));
-      CHECK(std::stoul(reg_split.at(7)) == std::stoul(gen_split.at(7)));
-      CHECK(std::stoul(reg_split.at(8)) == std::stoul(gen_split.at(8)));
-
-      // Check the float fields
-      CHECK(std::stold(reg_split.at(9)) == Approx(std::stold(gen_split.at(9))).epsilon(0.001));
-      CHECK(std::stold(reg_split.at(10)) == Approx(std::stold(gen_split.at(10))).epsilon(0.001));
-      CHECK(std::stold(reg_split.at(11)) == Approx(std::stold(gen_split.at(11))).epsilon(0.001));
-      CHECK(std::stold(reg_split.at(12)) == Approx(std::stold(gen_split.at(12))).epsilon(0.001));
-    }
+  // Never regenerate from binary output: the snapshot belongs to the text test
+  if (!asmc::test::regeneratingSnapshots()) {
+    checkLinesMatchSnapshot(lines, "fastsmc_no_hashing_job.ibd.gz", floatOutput);
   }
 }

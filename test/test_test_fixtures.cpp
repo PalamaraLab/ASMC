@@ -18,9 +18,27 @@
 
 #include <filesystem>
 
+#include "regression_snapshots.hpp"
 #include "test_fixtures.hpp"
 
 using Catch::Approx;
+
+TEST_CASE("regression snapshot fields are compared by type", "[fixtures]")
+{
+  using asmc::test::fieldsMatch;
+  using asmc::test::floatOutput;
+
+  // Integers and text must match exactly
+  CHECK(fieldsMatch("1572363", "1572363", floatOutput));
+  CHECK_FALSE(fieldsMatch("1572363", "1572364", floatOutput));
+  CHECK_FALSE(fieldsMatch("1_87", "1_88", floatOutput));
+
+  // Floating-point values may differ by the relative tolerance
+  CHECK(fieldsMatch("1.690128", "1.6905", floatOutput));
+  CHECK_FALSE(fieldsMatch("1.690128", "1.70", floatOutput));
+  CHECK(fieldsMatch("nan", "nan", floatOutput));
+  CHECK_FALSE(fieldsMatch("nan", "1.5", floatOutput));
+}
 
 TEST_CASE("test fixture helpers", "[fixtures]")
 {
