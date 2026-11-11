@@ -28,6 +28,7 @@
 #include <pybind11/stl.h>
 #include <pybind11/stl_bind.h>
 
+#include <limits>
 #include <vector>
 
 PYBIND11_MAKE_OPAQUE(std::vector<bool>)
@@ -127,7 +128,8 @@ PYBIND11_MODULE(asmc_python_bindings, m)
                     bool, bool, std::string, bool, bool, bool, std::string>(),
            "in_file_root"_a, "dq_file"_a, "out_file_root"_a = "", "jobs"_a = 1, "job_ind"_a = 1,
            "decoding_mode_string"_a = "array", "decoding_sequence"_a = false, "using_CSFS"_a = true,
-           "compress"_a = false, "use_ancestral"_a = false, "skip_CSFS_distance"_a = 0.f, "no_batches"_a = false,
+           "compress"_a = false, "use_ancestral"_a = false,
+           "skip_CSFS_distance"_a = std::numeric_limits<float>::quiet_NaN(), "no_batches"_a = false,
            "do_posterior_sums"_a = false, "do_per_pair_posterior_mean"_a = false, "expected_coal_times_file"_a = "",
            "within_only"_a = false, "do_major_minor_posterior_sums"_a = false, "do_per_pair_MAP"_a = false,
            "map_file"_a = "")

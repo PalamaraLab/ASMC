@@ -16,6 +16,7 @@
 #ifndef DECODINGPARAMS_HPP
 #define DECODINGPARAMS_HPP
 
+#include <limits>
 #include <string>
 
 enum class DecodingMode { sequenceFolded, arrayFolded, sequence, array };
@@ -27,6 +28,23 @@ class DecodingParams
 
 private:
   bool fastSmcInvokedWithProgramOptions = false;
+
+  /**
+   * Resolve skipCSFSdistance against compress. compress is shorthand for skipCSFSdistance = infinity, so it conflicts
+   * with any other distance. NaN means the distance was not set: it becomes infinity with compress and 0 (CSFS at every
+   * site) without. Running this more than once gives the same result, so parameters can be validated repeatedly.
+   *
+   * @param optionPrefix "--" when the parameters came from the command line, so that messages name the flags
+   * @throws std::invalid_argument if compress is combined with useAncestral or with a finite skipCSFSdistance
+   */
+  void resolveCompressAndCsfsDistance(const std::string& optionPrefix);
+
+  /**
+   * Set decodingModeOverall, decodingMode, decodingSequence and foldData from decodingModeString and useAncestral.
+   *
+   * @throws std::invalid_argument if decodingModeString is not "sequence" or "array" (in any case)
+   */
+  void resolveDecodingMode();
 
 public:
   std::string inFileRoot;
@@ -85,15 +103,34 @@ public:
   bool withinOnly = false;             // only compute decoding within individuals
   bool doMajorMinorPosteriorSums = false;
 
+  /**
+   * Validate the ASMC parameters and fill in the values derived from them (decoding mode, CSFS distance, jobs, output
+   * root).
+   *
+   * @return true
+   * @throws std::invalid_argument if the parameters are incompatible
+   */
   bool processOptions();
+
+  /**
+   * Parse and validate ASMC command-line arguments.
+   *
+   * @return false, after printing a message, if the arguments are invalid
+   */
   bool processCommandLineArgs(int argc, char* argv[]);
+
+  /**
+   * Parse and validate FastSMC command-line arguments.
+   *
+   * @return false, after printing a message, if the arguments are invalid
+   */
   bool processCommandLineArgsFastSMC(int argc, char* argv[]);
 
   /**
-   * Verify that the selected parameters are compatible. Incompatible options will cause FastSMC to exit with a message
-   * explaining the incompatibility.
+   * Verify that the selected FastSMC parameters are compatible, and fill in the values derived from them.
    *
-   * @return true if the parameters are compatible
+   * @return true
+   * @throws std::invalid_argument if the parameters are incompatible
    */
   bool validateParamsFastSMC();
 
@@ -109,18 +146,22 @@ public:
    * Decoding quantities will be generated if they are not specified and do not exist in the input file directory.
    */
   DecodingParams();
+
+  /**
+   * Constructor for ASMC. Runs processOptions, so it throws std::invalid_argument for incompatible parameters.
+   * _skipCSFSdistance defaults to NaN, meaning "not set": see resolveCompressAndCsfsDistance.
+   */
   explicit DecodingParams(std::string _inFileRoot, std::string _decodingQuantFile = "", std::string _outFileRoot = "",
                           int _jobs = 1, int _jobInd = 1, std::string _decodingModeString = "array",
                           bool _decodingSequence = false, bool _usingCSFS = true, bool _compress = false,
-                          bool _useAncestral = false, float _skipCSFSdistance = 0.f, bool _noBatches = false,
-                          bool _doPosteriorSums = false, bool _doPerPairPosteriorMean = false,
+                          bool _useAncestral = false, float _skipCSFSdistance = std::numeric_limits<float>::quiet_NaN(),
+                          bool _noBatches = false, bool _doPosteriorSums = false, bool _doPerPairPosteriorMean = false,
                           std::string _expectedCoalTimesFile = "", bool _withinOnly = false,
                           bool _doMajorMinorPosteriorSums = false, bool _doPerPairMAP = false,
                           std::string _mapFile = "");
 
   /**
-   * Minimal constructor that sets defaults for FastSMC. An error will occur if you try to use this constructor for
-   * FastSMC == false.
+   * Minimal constructor that sets defaults for FastSMC. It throws std::invalid_argument if _fastSMC is false.
    *
    * @param _inFileRoot the input file root
    * @param _decodingQuantFile the decoding quantities file
