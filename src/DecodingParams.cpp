@@ -27,6 +27,8 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
+#include <limits>
+#include <stdexcept>
 #include <string>
 
 namespace fs = std::filesystem;
@@ -52,9 +54,7 @@ DecodingParams::DecodingParams(std::string _inFileRoot, std::string _decodingQua
       doPerPairPosteriorMean(_doPerPairPosteriorMean), expectedCoalTimesFile(_expectedCoalTimesFile),
       withinOnly(_withinOnly), doMajorMinorPosteriorSums(_doMajorMinorPosteriorSums), doPerPairMAP(_doPerPairMAP)
 {
-  if (!processOptions()) {
-    throw std::exception();
-  }
+  processOptions();
 }
 
 DecodingParams::DecodingParams(std::string _inFileRoot, std::string _decodingQuantFile, std::string _outFileRoot,
@@ -67,10 +67,9 @@ DecodingParams::DecodingParams(std::string _inFileRoot, std::string _decodingQua
       doPerPairMAP(true)
 {
   if (!FastSMC) {
-    std::cerr << "This DecodingParams constructor sets sensible FastSMC defaults, and is only intended for use with"
-                 "FastSMC. Please set the fastSMC parameter to true, or use a different constructor."
-              << std::endl;
-    exit(1);
+    throw std::invalid_argument("This DecodingParams constructor sets sensible FastSMC defaults, and is only intended "
+                                "for use with FastSMC. Please set the fastSMC parameter to true, or use a different "
+                                "constructor.");
   }
 
   validateParamsFastSMC();
@@ -106,7 +105,8 @@ bool DecodingParams::processCommandLineArgs(int argc, char* argv[])
   // for debugging and pedagogical reasons.
  // ("noBatches", po::bool_switch(&noBatches)->default_value(false),
  //  "Do not decode in batches (for debugging, will remove)")
-  ("skipCSFSdistance", po::value<float>(&skipCSFSdistance)->default_value(0.),
+  // NaN means "not set", so that --compress can tell whether the user also gave a distance
+  ("skipCSFSdistance", po::value<float>(&skipCSFSdistance)->default_value(std::numeric_limits<float>::quiet_NaN(), "0"),
    "Genetic distance between two CSFS emissions")
   // main tasks
   ("majorMinorPosteriorSums", po::bool_switch(&doMajorMinorPosteriorSums)->default_value(false),
@@ -157,13 +157,17 @@ bool DecodingParams::processCommandLineArgs(int argc, char* argv[])
     return false;
   }
 
-  if (processOptions()) {
-    if (!doPosteriorSums && !doPerPairMAP && !doPerPairPosteriorMean && !doMajorMinorPosteriorSums) {
-      std::cerr << "ERROR: At least one of --posteriorSums, --majorMinorPosteriorSums, must be specified" << std::endl;
-      return false;
-    }
-  } else
+  try {
+    processOptions();
+  } catch (const std::invalid_argument& e) {
+    std::cerr << "ERROR: " << e.what() << '\n';
     return false;
+  }
+
+  if (!doPosteriorSums && !doPerPairMAP && !doPerPairPosteriorMean && !doMajorMinorPosteriorSums) {
+    std::cerr << "ERROR: At least one of --posteriorSums, --majorMinorPosteriorSums, must be specified\n";
+    return false;
+  }
   return true;
 }
 
@@ -174,8 +178,6 @@ bool DecodingParams::processCommandLineArgsFastSMC(int argc, char* argv[])
   fastSmcInvokedWithProgramOptions = true;
 
   FastSMC = true;
-
-  std::string decodingModeString;
 
   // clang-format off
 
@@ -205,12 +207,14 @@ bool DecodingParams::processCommandLineArgsFastSMC(int argc, char* argv[])
        "Recall level from 0 to 3 (higher value means higher recall). [default = 3]")
 
       // TASKS
-      ("segmentLength", po::bool_switch(&outputIbdSegmentLength)->default_value(true),
-       "Output length in centimorgans of each IBD segment. [default 1/on]")
-      ("perPairMAP", po::bool_switch(&doPerPairMAP)->default_value(true),
-       "Output per-pair MAP for each IBD segment. [default 1/on]")
-      ("perPairPosteriorMeans", po::bool_switch(&doPerPairPosteriorMean)->default_value(true),
-       "Output per-pair posterior means for each IBD segment. [default 1/on]")
+      // Options that default to on take a value, so they can be turned off with e.g. --segmentLength=0. A
+      // bool_switch can only turn an option on.
+      ("segmentLength", po::value<bool>(&outputIbdSegmentLength)->default_value(true)->implicit_value(true),
+       "Output length in centimorgans of each IBD segment. [default 1/on; --segmentLength=0 for off]")
+      ("perPairMAP", po::value<bool>(&doPerPairMAP)->default_value(true)->implicit_value(true),
+       "Output per-pair MAP for each IBD segment. [default 1/on; --perPairMAP=0 for off]")
+      ("perPairPosteriorMeans", po::value<bool>(&doPerPairPosteriorMean)->default_value(true)->implicit_value(true),
+       "Output per-pair posterior means for each IBD segment. [default 1/on; --perPairPosteriorMeans=0 for off]")
       ("noConditionalAgeEstimates", po::bool_switch(&noConditionalAgeEstimates)->default_value(false),
        "Do not condition the age estimates on the TMRCA being between present time and t generations ago (where t is the time threshold). [default 0/off]")
       ("withinOnly", po::bool_switch(&withinOnly)->default_value(false),
@@ -229,8 +233,8 @@ bool DecodingParams::processCommandLineArgsFastSMC(int argc, char* argv[])
        "Genetic distance between two CSFS emissions")
 
       //hashing options
-      ("hashing", po::bool_switch(&hashing)->default_value(true),
-       "Use of hashing to pre-process IBD segments [default 1/on]")
+      ("hashing", po::value<bool>(&hashing)->default_value(true)->implicit_value(true),
+       "Use of hashing to pre-process IBD segments [default 1/on; --hashing=0 for off]")
       ("hashingOnly", po::bool_switch(&hashingOnly)->default_value(false),
        "Only perform GERMLINE2 hashing, not ASMC decoding [default 0/off]")
       ("min_m", po::value<float>(&min_m)->default_value(1.0),
@@ -282,7 +286,13 @@ bool DecodingParams::processCommandLineArgsFastSMC(int argc, char* argv[])
     return false;
   }
 
-  return validateParamsFastSMC();
+  // validateBatchSize reports errors as std::runtime_error, the rest of validation as std::invalid_argument
+  try {
+    return validateParamsFastSMC();
+  } catch (const std::exception& e) {
+    std::cerr << "ERROR: " << e.what() << '\n';
+    return false;
+  }
 }
 
 bool DecodingParams::validateParamsFastSMC()
@@ -290,10 +300,8 @@ bool DecodingParams::validateParamsFastSMC()
   const std::string del = fastSmcInvokedWithProgramOptions ? "--" : "";
 
   if (!FastSMC) {
-    std::cerr
-        << "Attempting to validate FastSMC parameters but FastSMC flag is false. Set DecodingParams::FastSMC to true?"
-        << std::endl;
-    exit(1);
+    throw std::invalid_argument(
+        "Attempting to validate FastSMC parameters but FastSMC flag is false. Set DecodingParams::FastSMC to true?");
   }
 
   if (hashingOnly) {
@@ -313,66 +321,19 @@ bool DecodingParams::validateParamsFastSMC()
 
   if (hashing) {
     if (withinOnly) {
-      std::cerr << del << "hashing & " << del
-                << "withinOnly cannot be used together. Please remove one of the two flags." << std::endl;
-      exit(1);
+      throw std::invalid_argument(fmt::format(
+          "{}hashing & {}withinOnly cannot be used together. Please remove one of the two flags.", del, del));
     }
     if (time <= 0) {
-      std::cerr << del << "time must be a positive integer." << std::endl;
-      exit(1);
+      throw std::invalid_argument(fmt::format("{}time must be a positive integer.", del));
     }
   }
 
   // batchSize must be a positive multiple of the number of SIMD lanes
   asmc::validateBatchSize(batchSize);
 
-  if (compress) {
-    if (useAncestral) {
-      std::cerr << del << "compress & " << del
-                << "useAncestral cannot be used together. A compressed emission cannot use"
-                << " ancestral allele information." << std::endl;
-      exit(1);
-    }
-    if (!std::isnan(skipCSFSdistance)) {
-      std::cerr << del << "compress & " << del << "skipCSFSdistance cannot be used together. " << del << "compress is a"
-                << " shorthand for " << del << "skipCSFSdistance Infinity." << std::endl;
-      exit(1);
-    }
-    skipCSFSdistance = std::numeric_limits<float>::infinity();
-  } else {
-    if (std::isnan(skipCSFSdistance)) {
-      // default: use CSFS at all sites
-      skipCSFSdistance = 0.f;
-    }
-  }
-
-  if (skipCSFSdistance != std::numeric_limits<float>::infinity()) {
-    usingCSFS = true;
-  }
-
-  boost::algorithm::to_lower(decodingModeString);
-  if (decodingModeString == std::string("sequence")) {
-    decodingSequence = true;
-    if (useAncestral) {
-      decodingMode = DecodingMode::sequence;
-      foldData = false;
-    } else {
-      decodingMode = DecodingMode::sequenceFolded;
-      foldData = true;
-    }
-  } else if (decodingModeString == std::string("array")) {
-    decodingSequence = false;
-    if (useAncestral) {
-      decodingMode = DecodingMode::array;
-      foldData = false;
-    } else {
-      decodingMode = DecodingMode::arrayFolded;
-      foldData = true;
-    }
-  } else {
-    std::cerr << "ERROR. Unknown decoding mode: " << decodingModeString << std::endl;
-    exit(1);
-  }
+  resolveCompressAndCsfsDistance(del);
+  resolveDecodingMode();
 
   if (decodingQuantFile.empty()) {
     std::cout << "Setting " << del << "decodingQuantFile to " << del << "inFileRoot + .decodingQuantities.bin"
@@ -381,9 +342,7 @@ bool DecodingParams::validateParamsFastSMC()
   }
 
   if ((jobs == 0) != (jobInd == 0)) {
-    std::cerr << "ERROR: " << del << "jobs and " << del << "jobInd must either both be set or both be unset"
-              << std::endl;
-    exit(1);
+    throw std::invalid_argument(fmt::format("{}jobs and {}jobInd must either both be set or both be unset", del, del));
   }
 
   if (jobs == 0) {
@@ -392,8 +351,7 @@ bool DecodingParams::validateParamsFastSMC()
   }
 
   if (jobInd <= 0 || jobInd > jobs || jobs <= 0) {
-    std::cerr << "ERROR: " << del << "jobInd must be between 1 and " << del << "jobs inclusive" << std::endl;
-    exit(1);
+    throw std::invalid_argument(fmt::format("{}jobInd must be between 1 and {}jobs inclusive", del, del));
   }
 
   bool valid_job = false;
@@ -413,13 +371,11 @@ bool DecodingParams::validateParamsFastSMC()
   }
 
   if (!valid_job) {
-    std::cerr << "ERROR: jobs value is incorrect. You should use either " << prev_u << " or " << u << std::endl;
-    exit(1);
+    throw std::invalid_argument(fmt::format("jobs value is incorrect. You should use either {} or {}", prev_u, u));
   }
 
   if (recallThreshold < 0 || recallThreshold > 3) {
-    std::cerr << "ERROR: " << del << "recall must be between 0 and 3. " << std::endl;
-    exit(1);
+    throw std::invalid_argument(fmt::format("{}recall must be between 0 and 3.", del));
   }
 
   if (outFileRoot.empty()) {
@@ -515,69 +471,13 @@ bool DecodingParams::printDecodingParams()
 
 bool DecodingParams::processOptions()
 {
-
-  if (compress) {
-    if (useAncestral) {
-      std::cerr
-          << "--compress & --useAncestral cannot be used together. A compressed emission cannot use ancestral allele "
-             "information."
-          << std::endl;
-      exit(1);
-    }
-    if (!std::isnan(skipCSFSdistance)) {
-      std::cerr << "--compress & --skipCSFSdistance cannot be used together. --compress is a shorthand for "
-                   "--skipCSFSdistance Infinity."
-                << std::endl;
-      exit(1);
-    }
-    skipCSFSdistance = std::numeric_limits<float>::infinity();
-  } else {
-    if (std::isnan(skipCSFSdistance)) {
-      // default: use CSFS at all sites
-      skipCSFSdistance = 0.f;
-    }
-  }
+  resolveCompressAndCsfsDistance("--");
 
   if (!expectedCoalTimesFile.empty()) {
     doPerPairPosteriorMean = true;
   }
 
-  if (skipCSFSdistance != std::numeric_limits<float>::infinity()) {
-    usingCSFS = true;
-  }
-
-  boost::algorithm::to_lower(decodingModeString);
-  if (decodingModeString == std::string("sequence"))
-    decodingModeOverall = DecodingModeOverall::sequence;
-  else if (decodingModeString == std::string("array"))
-    decodingModeOverall = DecodingModeOverall::array;
-  else {
-    std::cerr << "Decoding mode should be one of {sequence, array}";
-    return false;
-  }
-
-  if (decodingModeOverall == DecodingModeOverall::sequence) {
-    decodingSequence = true;
-    if (useAncestral) {
-      decodingMode = DecodingMode::sequence;
-      foldData = false;
-    } else {
-      decodingMode = DecodingMode::sequenceFolded;
-      foldData = true;
-    }
-  } else if (decodingModeOverall == DecodingModeOverall::array) {
-    decodingSequence = false;
-    if (useAncestral) {
-      decodingMode = DecodingMode::array;
-      foldData = false;
-    } else {
-      decodingMode = DecodingMode::arrayFolded;
-      foldData = true;
-    }
-  } else {
-    std::cerr << "ERROR. Unknown decoding mode: " << decodingModeString << std::endl;
-    exit(1);
-  }
+  resolveDecodingMode();
 
   if (decodingQuantFile.empty()) {
     std::cout << "Setting --decodingQuantFile to --inFileRoot + .decodingQuantities.bin" << std::endl;
@@ -585,8 +485,7 @@ bool DecodingParams::processOptions()
   }
 
   if ((jobs == 0) != (jobInd == 0)) {
-    std::cerr << "ERROR: --jobs and --jobInd must either both be set or both be unset" << std::endl;
-    return false;
+    throw std::invalid_argument("--jobs and --jobInd must either both be set or both be unset");
   }
 
   if (jobs == 0) {
@@ -595,8 +494,7 @@ bool DecodingParams::processOptions()
   }
 
   if (jobInd <= 0 || jobInd > jobs) {
-    std::cerr << "ERROR: --jobInd must be between 1 and --jobs inclusive" << std::endl;
-    return false;
+    throw std::invalid_argument("--jobInd must be between 1 and --jobs inclusive");
   }
   if (outFileRoot.empty()) {
     outFileRoot = inFileRoot;
@@ -605,4 +503,55 @@ bool DecodingParams::processOptions()
     }
   }
   return true;
+}
+
+void DecodingParams::resolveCompressAndCsfsDistance(const std::string& optionPrefix)
+{
+  const std::string& del = optionPrefix;
+
+  if (compress) {
+    if (useAncestral) {
+      throw std::invalid_argument(fmt::format("{}compress & {}useAncestral cannot be used together. A compressed "
+                                              "emission cannot use ancestral allele information.",
+                                              del, del));
+    }
+    // Infinity is what compress itself sets, so accepting it lets this run more than once
+    const bool distanceSetByUser = !std::isnan(skipCSFSdistance) && !std::isinf(skipCSFSdistance);
+    if (distanceSetByUser) {
+      throw std::invalid_argument(fmt::format("{}compress & {}skipCSFSdistance cannot be used together. {}compress is "
+                                              "a shorthand for {}skipCSFSdistance Infinity.",
+                                              del, del, del, del));
+    }
+    skipCSFSdistance = std::numeric_limits<float>::infinity();
+  } else if (std::isnan(skipCSFSdistance)) {
+    // default: use CSFS at all sites
+    skipCSFSdistance = 0.f;
+  }
+
+  if (skipCSFSdistance != std::numeric_limits<float>::infinity()) {
+    usingCSFS = true;
+  }
+}
+
+void DecodingParams::resolveDecodingMode()
+{
+  boost::algorithm::to_lower(decodingModeString);
+  if (decodingModeString == "sequence") {
+    decodingModeOverall = DecodingModeOverall::sequence;
+    decodingSequence = true;
+  } else if (decodingModeString == "array") {
+    decodingModeOverall = DecodingModeOverall::array;
+    decodingSequence = false;
+  } else {
+    throw std::invalid_argument(
+        fmt::format("Unknown decoding mode \"{}\": should be one of {{sequence, array}}", decodingModeString));
+  }
+
+  // Without ancestral allele information, alleles are folded to minor/major
+  foldData = !useAncestral;
+  if (decodingSequence) {
+    decodingMode = useAncestral ? DecodingMode::sequence : DecodingMode::sequenceFolded;
+  } else {
+    decodingMode = useAncestral ? DecodingMode::array : DecodingMode::arrayFolded;
+  }
 }

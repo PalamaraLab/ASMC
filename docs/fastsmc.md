@@ -33,7 +33,7 @@ Note: default parameter values are likely to change in future versions.
   --mapFile                  	Optional override for .map file, if not in inFileRoot.
                               	[optional]
   --hashing                  	Use of hashing to pre-process IBD segments. If off, no identification step will be performed.
-                              	[default 1/on]
+                              	[default 1/on; --hashing=0 for off]
   --min_m arg (=1)		        Minimum match length (in cM).
 				                [default = 1.0]
   --time arg (=100)		        Time threshold to define IBD in number of generations.
@@ -49,11 +49,11 @@ Note: default parameter values are likely to change in future versions.
   --recall arg (=3)		        Recall level from 0 to 3 (higher value means higher recall).
 				                [default = 3]
   --segmentLength		        Output length in centimorgans of each IBD segment.
-				                [default 1/on]
+				                [default 1/on; --segmentLength=0 for off]
   --perPairMAP			        Output MAP age estimate for each IBD segment.
-				                [default 1/on]
+				                [default 1/on; --perPairMAP=0 for off]
   --perPairPosteriorMeans	    Output posterior mean age estimate for each IBD segment.
-				                [default 1/on]
+				                [default 1/on; --perPairPosteriorMeans=0 for off]
   --noConditionalAgeEstimates	Do not condition the age estimates on the TMRCA being between present time and t 
 				                generations ago (where t is the time threshold).
 				                [default 0/off]

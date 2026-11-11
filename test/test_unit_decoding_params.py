@@ -34,6 +34,16 @@ class TestDecodingParams(unittest.TestCase):
                                 use_ancestral=True)
         self.assertEqual(params.decodingMode, DecodingMode.sequence)
 
+    def test_compress_without_skip_csfs_distance(self):
+        params = DecodingParams(self.inFileRoot, self.decodingQuantFile, compress=True)
+        self.assertEqual(params.skipCSFSdistance, float('inf'))
+
+    def test_invalid_parameters_raise_instead_of_exiting(self):
+        with self.assertRaises(ValueError):
+            DecodingParams(self.inFileRoot, self.decodingQuantFile, decoding_mode_string="nonsense")
+        with self.assertRaises(ValueError):
+            DecodingParams(self.inFileRoot, self.decodingQuantFile, compress=True, skip_CSFS_distance=0.1)
+
 
 if __name__ == "__main__":
     unittest.main()
