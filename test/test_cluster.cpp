@@ -18,7 +18,7 @@
 // large-n properties (memory, parallel scaling) are exercised in the
 // out-of-tree regression suite at tasks/asmc_clust_native/.
 
-#include "catch.hpp"
+#include <catch2/catch_test_macros.hpp>
 
 #include <cmath>
 #include <unordered_set>
