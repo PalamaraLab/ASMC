@@ -179,6 +179,15 @@ public:
   /// The FastSMC version that takes a from and a to
   std::vector<std::vector<float>> decode(const PairObservations& observations, unsigned from, unsigned to);
 
+  /// Non-batched forward pass over sites [from, to), used as a reference for the batched code. Returns alpha indexed
+  /// [state][site] over all sites, zero outside [from, to). Each site's alpha is rescaled to sum to 1 when the site
+  /// index is a multiple of the constructor's `_scalingSkip`, and at `from`.
+  std::vector<std::vector<float>> forward(const PairObservations& observations, unsigned from, unsigned to);
+
+  /// Non-batched backward pass over sites [from, to), used as a reference for the batched code. Returns beta indexed
+  /// [state][site] over all sites, zero outside [from, to). Rescaled as in `forward`, and at `to - 1`.
+  std::vector<std::vector<float>> backward(const PairObservations& observations, unsigned from, unsigned to);
+
   /// Original decode version, which calls the three-parameter version with sensible defaults
   std::vector<std::vector<float>> decode(const PairObservations& observations);
 
@@ -381,16 +390,10 @@ private:
 
   std::vector<float> getEmission(int pos, int distinguished, int undistinguished, int emissionIndex);
 
-  // forward step
-  std::vector<std::vector<float>> forward(const PairObservations& observations, unsigned from, unsigned to);
-
   void getNextAlpha(float recDistFromPrevious, std::vector<float>& alphaC, std::vector<float>& previousAlpha,
                     std::vector<float>& nextAlpha, std::vector<float>& emission1AtSite,
                     std::vector<float>& emission0minus1AtSite, std::vector<float>& emission2minus0AtSite,
                     float obsIsZero, float obsIsHomMinor);
-
-  // backward step
-  std::vector<std::vector<float>> backward(const PairObservations& observations, unsigned from, unsigned to);
 
   void getPreviousBeta(float recDistFromPrevious, std::vector<float>& lastComputedBeta, std::vector<float>& BL,
                        std::vector<float>& BU, std::vector<float>& currentBeta, std::vector<float>& emission1AtSite,
