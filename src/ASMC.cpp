@@ -21,13 +21,12 @@
 #include <exception>
 #include <iostream>
 
-ASMC::ASMC::ASMC(DecodingParams params) : mParams{std::move(params)}, mData{mParams}, mHmm{mData, mParams}
+ASMC::ASMC::ASMC(DecodingParams params) : mParams{std::move(params)}, mHmm{Data{mParams}, mParams}
 {
   setStorePerPairPosteriorMean(true);
 }
 
-ASMC::ASMC::ASMC(DecodingParams params, Data data)
-    : mParams{std::move(params)}, mData{std::move(data)}, mHmm{mData, mParams}
+ASMC::ASMC::ASMC(DecodingParams params, Data data) : mParams{std::move(params)}, mHmm{std::move(data), mParams}
 {
   setStorePerPairPosteriorMean(true);
 }
@@ -52,7 +51,7 @@ ASMC::ASMC::ASMC(const std::string& inFileRoot, const std::string& decodingQuant
               false,
               true,
               true},
-      mData{mParams}, mHmm{mData, mParams}
+      mHmm{Data{mParams}, mParams}
 {
   setStorePerPairPosteriorMean(true);
 }
@@ -64,27 +63,27 @@ DecodingParams ASMC::ASMC::getDecodingParams()
 
 unsigned long ASMC::ASMC::getDiploidSampleSize()
 {
-  return mData.sampleSize;
+  return data().sampleSize;
 }
 
 unsigned long ASMC::ASMC::getHaploidSampleSize()
 {
-  return mData.haploidSampleSize;
+  return data().haploidSampleSize;
 }
 
 int ASMC::ASMC::getNumSites()
 {
-  return mData.sites;
+  return data().sites;
 }
 
 std::vector<int> ASMC::ASMC::getPhysicalPositions()
 {
-  return mData.physicalPositions;
+  return data().physicalPositions;
 }
 
 std::vector<float> ASMC::ASMC::getGeneticPositions()
 {
-  return mData.geneticPositions;
+  return data().geneticPositions;
 }
 
 DecodingReturnValues ASMC::ASMC::decodeAllInJob()
@@ -118,7 +117,7 @@ DecodingReturnValues ASMC::ASMC::decodeAllInJob()
 
 void ASMC::ASMC::decodePairs(const unsigned from, const unsigned to, const float cmBurnIn)
 {
-  const unsigned long numInd = mData.individuals.size();
+  const unsigned long numInd = data().individuals.size();
   const unsigned long numHap = 2ul * numInd;
   const unsigned long numPairs = 2ul * numInd * numInd - numInd;
 
@@ -157,7 +156,7 @@ void ASMC::ASMC::decodePairs(const std::vector<unsigned long>& hapIndicesA,
     return;
   }
 
-  const long int seqLen = to > from ? to - from : mData.sites;
+  const long int seqLen = to > from ? to - from : data().sites;
   mHmm.getDecodePairsReturnStruct().initialise(
       hapIndicesA, hapIndicesB, seqLen, mHmm.getDecodingQuantities().states, mHmm.getStorePerPairPosterior(),
       mHmm.getStoreSumOfPosterior(), mHmm.getStorePerPairPosteriorMean(), mHmm.getStorePerPairMap());
@@ -175,7 +174,7 @@ void ASMC::ASMC::decodePairsParallel(const std::vector<unsigned long>& hapIndice
         fmt::format("Vector of A indices ({}) must be the same size as vector of B indices ({}).\n", hapIndicesA.size(),
                     hapIndicesB.size()));
   }
-  const long int seqLen = to > from ? to - from : mData.sites;
+  const long int seqLen = to > from ? to - from : data().sites;
   mHmm.getDecodePairsReturnStruct().initialise(
       hapIndicesA, hapIndicesB, seqLen, mHmm.getDecodingQuantities().states, mHmm.getStorePerPairPosterior(),
       mHmm.getStoreSumOfPosterior(), mHmm.getStorePerPairPosteriorMean(), mHmm.getStorePerPairMap());
@@ -201,8 +200,8 @@ void ASMC::ASMC::decodePairs(const std::vector<std::string>& hapIdsA, const std:
     auto [strIdA, hapA] = asmc::combinedIdToIndPlusHap(hapIdsA.at(i));
     auto [strIdB, hapB] = asmc::combinedIdToIndPlusHap(hapIdsB.at(i));
 
-    unsigned long indIdA = asmc::getIndIdxFromIdString(mData.IIDList, strIdA);
-    unsigned long indIdB = asmc::getIndIdxFromIdString(mData.IIDList, strIdB);
+    unsigned long indIdA = asmc::getIndIdxFromIdString(data().IIDList, strIdA);
+    unsigned long indIdB = asmc::getIndIdxFromIdString(data().IIDList, strIdB);
 
     hapsIndicesA.at(i) = asmc::dipToHapId(indIdA, hapA);
     hapsIndicesB.at(i) = asmc::dipToHapId(indIdB, hapB);

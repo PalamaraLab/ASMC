@@ -359,6 +359,12 @@ public:
 
   const DecodingParams& getDecodingParams() const;
 
+  /// The data being decoded, including any genotypes loaded with loadSubsetGenotypes
+  const Data& getData() const
+  {
+    return data;
+  }
+
   /// Load subset genotypes into the Data object (for streaming pair decoding)
   void loadSubsetGenotypes(const int8_t* haplotypes, int numSubsetHaps);
 

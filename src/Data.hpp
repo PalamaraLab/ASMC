@@ -76,6 +76,7 @@ public:
    * @param haplotypes flat row-major genotype matrix (0/1), length numSites * 2*numDiploidSamples
    * @param usingCSFS whether to use CSFS
    * @param foldData whether to fold to minor allele
+   * @throws std::invalid_argument if a genotype is not 0 or 1
    */
   Data(int numSites, unsigned long numDiploidSamples,
        std::vector<int> physPositions,
@@ -85,15 +86,18 @@ public:
 
   /**
    * Construct from precomputed allele counts, without loading genotypes.
-   * Genotypes can be loaded later via loadSubsetGenotypes().
+   * Genotypes can be loaded later via loadSubsetGenotypes(). With foldData, sites where the derived allele is the
+   * majority are folded, as in the constructor from genotypes.
+   * @throws std::invalid_argument if the count vectors differ in length, or a derived count is outside [0, total]
    */
   Data(std::vector<int> derivedCounts, std::vector<int> totalCounts,
        std::vector<int> physPositions, std::vector<float> genPositions,
        bool usingCSFS, bool foldData);
 
   /**
-   * Load genotypes for a subset of haplotypes (for streaming pair decoding).
+   * Load genotypes for a subset of haplotypes (for streaming pair decoding), as described for setGenotypes.
    * Does NOT recompute emissions — allele counts must already be set.
+   * @throws std::invalid_argument if a genotype is not 0 or 1
    */
   void loadSubsetGenotypes(const int8_t* haplotypes, int numSubsetHaps);
 
@@ -197,6 +201,7 @@ private:
    * Replace the individuals with `numHaps / 2` with placeholder names and genotypes from `haplotypes`, laid out
    * [site * numHaps + hap] with 1 for the derived allele. Sites in siteWasFlippedDuringFolding are flipped, so that 1
    * then means the minor allele, as it does for the allele counts.
+   * @throws std::invalid_argument if a genotype is not 0 or 1
    */
   void setGenotypes(const int8_t* haplotypes, int numHaps);
 

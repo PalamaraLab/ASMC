@@ -85,6 +85,24 @@ class TestFromArrays(unittest.TestCase):
         with self.assertRaises(Exception):
             ASMC.from_arrays(self.geno, phys_short, self.gen, dq_file)
 
+    def test_from_arrays_rejects_genotypes_other_than_0_or_1(self):
+        """from_arrays should reject genotypes other than 0 and 1, rather than reading them as 0."""
+        for bad_value in (-1, 2):
+            bad_geno = self.geno.copy()
+            bad_geno[5, 7] = bad_value
+            with self.assertRaises(ValueError):
+                ASMC.from_arrays(bad_geno, self.phys, self.gen, dq_file)
+
+    def test_from_arrays_decoding_mode(self):
+        """from_arrays should accept the decoding mode in any case, and reject unknown modes."""
+        for mode in ("Sequence", "SEQUENCE"):
+            params = ASMC.from_arrays(self.geno, self.phys, self.gen, dq_file, decoding_mode=mode).get_decoding_params()
+            self.assertTrue(params.decodingSequence)
+        params = ASMC.from_arrays(self.geno, self.phys, self.gen, dq_file, decoding_mode="Array").get_decoding_params()
+        self.assertFalse(params.decodingSequence)
+        with self.assertRaises(ValueError):
+            ASMC.from_arrays(self.geno, self.phys, self.gen, dq_file, decoding_mode="seq")
+
 
 class TestFromCounts(unittest.TestCase):
     """Test ASMC.from_counts + load_genotypes streaming."""
@@ -162,6 +180,51 @@ class TestFromCounts(unittest.TestCase):
         with self.assertRaises(Exception):
             ASMC.from_counts(self.dac[:10], self.tsc, self.phys, self.gen, dq_file)
 
+    def test_from_counts_rejects_counts_outside_total(self):
+        """from_counts should reject a derived count below 0 or above the total."""
+        for bad_count in (-1, self.n_haps + 1):
+            dac = self.dac.copy()
+            dac[5] = bad_count
+            with self.assertRaises(ValueError):
+                ASMC.from_counts(dac, self.tsc, self.phys, self.gen, dq_file)
+
+    def test_load_genotypes_updates_sample_size_and_pairs(self):
+        """After load_genotypes, the sample sizes and decode_pairs() with no arguments should see the loaded samples."""
+        asmc = ASMC.from_counts(self.dac, self.tsc, self.phys, self.gen, dq_file)
+        asmc.load_genotypes(self.geno[:, :6].copy())
+        self.assertEqual(asmc.get_haploid_sample_size(), 6)
+        self.assertEqual(asmc.get_diploid_sample_size(), 3)
+
+        asmc.decode_pairs()
+        self.assertEqual(len(asmc.get_copy_of_results().per_pair_indices), 15)  # 6 haplotypes make 15 pairs
+
+    def test_from_counts_folds_derived_counts(self):
+        """With derived (unfolded) counts and genotypes, from_counts should fold them as from_arrays does."""
+        # The reference genotypes are already folded, so make the derived allele the majority at every third site
+        derived_geno = self.geno.copy()
+        derived_geno[::3] = 1 - derived_geno[::3]
+        derived_counts = derived_geno.sum(axis=1).astype(np.int32)
+        pairs_a, pairs_b = [0, 2], [1, 3]
+
+        ref = ASMC.from_arrays(derived_geno, self.phys, self.gen, dq_file)
+        ref.decode_pairs(pairs_a, pairs_b)
+        ref_means = np.array(ref.get_copy_of_results().per_pair_posterior_means)
+
+        asmc = ASMC.from_counts(derived_counts, self.tsc, self.phys, self.gen, dq_file)
+        asmc.load_genotypes(derived_geno[:, :4].copy())
+        asmc.decode_pairs(pairs_a, pairs_b)
+        stream_means = np.array(asmc.get_copy_of_results().per_pair_posterior_means)
+
+        np.testing.assert_allclose(ref_means, stream_means, rtol=1e-4)
+
+    def test_load_genotypes_rejects_genotypes_other_than_0_or_1(self):
+        """load_genotypes should reject genotypes other than 0 and 1, rather than reading them as 0."""
+        asmc = ASMC.from_counts(self.dac, self.tsc, self.phys, self.gen, dq_file)
+        bad = self.geno[:, :4].copy()
+        bad[5, 1] = 2
+        with self.assertRaises(ValueError):
+            asmc.load_genotypes(bad)
+
 
 class TestDecodePairsParallel(unittest.TestCase):
     """Test decode_pairs_parallel matches sequential decode_pairs."""
@@ -197,7 +260,7 @@ class TestDecodePairsParallel(unittest.TestCase):
         )
 
     def test_parallel_single_thread_matches(self):
-        """Parallel with n_threads=1 should fall back to sequential."""
+        """Parallel decoding with n_threads=1 should match sequential decoding."""
         pairs_a, pairs_b = [0, 2], [1, 3]
 
         seq = ASMC.from_arrays(self.geno, self.phys, self.gen, dq_file)
