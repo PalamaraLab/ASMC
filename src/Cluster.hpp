@@ -62,8 +62,8 @@ struct ClusterChunkResult {
 /// site_block     UPGMA is run on blocks of this many sites at a time
 ///                so the resident pair-distance buffer is bounded by
 ///                numPairs × site_block × 4 B. 0 → one big block.
-/// n_threads      threads for both the underlying decode_pairs_parallel
-///                and the per-site UPGMA OMP loop. 0 → caller default.
+/// n_threads      threads for both the underlying decodePairsParallel and
+///                the per-site UPGMA loop. 0 → decodePairs and one thread.
 /// cm_burn_in     padding (cM) for the HMM at chunk boundaries (same
 ///                semantic as decode_pairs).
 /// arg_offset     subtract from physical positions when computing
@@ -84,6 +84,10 @@ struct ClusterChunkResult {
 ///                sites in cM. K is in *sites*, not cM — for safety pick
 ///                K so K * (cM / site) ≲ 0.01 cM (empirical sweet spot at
 ///                array-density data; tighter for sequencing density).
+///
+/// Sets asmc's per-pair outputs to posterior means only, and leaves them so.
+/// Throws std::invalid_argument for fewer than 2 haplotypes or an invalid
+/// [from, to), and std::runtime_error if a site's tree cannot be built.
 ClusterChunkResult clusterChunk(class ASMC& asmc,
                                 unsigned from = 0u,
                                 unsigned to = 0u,

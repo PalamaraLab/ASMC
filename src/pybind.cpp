@@ -358,16 +358,16 @@ PYBIND11_MODULE(asmc_python_bindings, m)
             self.loadSubsetGenotypes(genotypes.data(), static_cast<int>(genotypes.shape(1)));
           }, "genotypes"_a, "Load genotypes (num_sites x num_subset_haps) for a batch of pair decoding.")
       .def("clear_genotypes", &ASMC::ASMC::clearGenotypes, "Clear loaded genotypes to free memory between batches.")
-      // ASMC-clust: per-site UPGMA over posterior-mean TMRCAs. Returns a tuple of
-      // numpy arrays so callers can ingest it into tskit / arg-needle-lib without
-      // copying. See src/Cluster.hpp for layout details.
+      // ASMC-clust: per-site UPGMA over posterior-mean TMRCAs. Returns a dict of the counts and numpy arrays, which
+      // own the result's memory, so callers can ingest it into tskit / arg-needle-lib without copying. See
+      // src/Cluster.hpp for layout details.
       .def("cluster_chunk", [](
             ASMC::ASMC& self,
             unsigned from, unsigned to,
             unsigned site_block, int n_threads,
             float cm_burn_in, int arg_offset, double arg_length,
             unsigned anchor_stride_k
-          ) -> py::tuple {
+          ) -> py::dict {
             ASMC::ClusterChunkResult r =
                 ASMC::clusterChunk(self, from, to, site_block, n_threads,
                                    cm_burn_in, arg_offset, arg_length,
@@ -393,7 +393,7 @@ PYBIND11_MODULE(asmc_python_bindings, m)
             result["edge_right"]      = take_vec(std::move(r.edge_right));
             result["edge_parent"]     = take_vec(std::move(r.edge_parent));
             result["edge_child"]      = take_vec(std::move(r.edge_child));
-            return py::tuple(py::make_tuple(result));
+            return result;
           },
           "from_"_a = 0u, "to"_a = 0u,
           "site_block"_a = 0u, "n_threads"_a = 0,
