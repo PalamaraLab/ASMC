@@ -26,6 +26,12 @@ ASMC::ASMC::ASMC(DecodingParams params) : mParams{std::move(params)}, mData{mPar
   setStorePerPairPosteriorMean(true);
 }
 
+ASMC::ASMC::ASMC(DecodingParams params, Data data)
+    : mParams{std::move(params)}, mData{std::move(data)}, mHmm{mData, mParams}
+{
+  setStorePerPairPosteriorMean(true);
+}
+
 ASMC::ASMC::ASMC(const std::string& inFileRoot, const std::string& decodingQuantFile, const std::string& outFileRoot,
                  const std::string& decodingMode)
     : mParams{inFileRoot,
@@ -248,4 +254,14 @@ void ASMC::ASMC::setStorePerPairPosterior(bool storePerPairPosterior)
 void ASMC::ASMC::setStoreSumOfPosterior(bool storeSumOfPosterior)
 {
   mHmm.setStoreSumOfPosterior(storeSumOfPosterior);
+}
+
+void ASMC::ASMC::loadSubsetGenotypes(const int8_t* haplotypes, int numSubsetHaps)
+{
+  mHmm.loadSubsetGenotypes(haplotypes, numSubsetHaps);
+}
+
+void ASMC::ASMC::clearGenotypes()
+{
+  mHmm.clearGenotypes();
 }

@@ -1949,3 +1949,13 @@ const DecodingParams& HMM::getDecodingParams() const
 {
   return decodingParams;
 }
+
+void HMM::loadSubsetGenotypes(const int8_t* haplotypes, int numSubsetHaps)
+{
+  data.loadSubsetGenotypes(haplotypes, numSubsetHaps);
+}
+
+void HMM::clearGenotypes()
+{
+  data.clearGenotypes();
+}

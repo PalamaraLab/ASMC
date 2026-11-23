@@ -359,6 +359,12 @@ public:
 
   const DecodingParams& getDecodingParams() const;
 
+  /// Load subset genotypes into the Data object (for streaming pair decoding)
+  void loadSubsetGenotypes(const int8_t* haplotypes, int numSubsetHaps);
+
+  /// Clear loaded genotypes to free memory between batches
+  void clearGenotypes();
+
 private:
   void writeBinaryInfoIntoFile();
 

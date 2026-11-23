@@ -16,6 +16,7 @@
 #ifndef ASMC_DATA_HPP
 #define ASMC_DATA_HPP
 
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -64,6 +65,42 @@ public:
    * @param params the decoding params
    */
   explicit Data(const DecodingParams& params);
+
+  /**
+   * Construct from in-memory arrays, bypassing all file I/O.
+   *
+   * @param numSites number of variant sites
+   * @param numDiploidSamples number of diploid individuals
+   * @param physPositions physical positions (bp), length numSites
+   * @param genPositions genetic positions (Morgans), length numSites
+   * @param haplotypes flat row-major genotype matrix (0/1), length numSites * 2*numDiploidSamples
+   * @param usingCSFS whether to use CSFS
+   * @param foldData whether to fold to minor allele
+   */
+  Data(int numSites, unsigned long numDiploidSamples,
+       std::vector<int> physPositions,
+       std::vector<float> genPositions,
+       const int8_t* haplotypes,
+       bool usingCSFS, bool foldData);
+
+  /**
+   * Construct from precomputed allele counts, without loading genotypes.
+   * Genotypes can be loaded later via loadSubsetGenotypes().
+   */
+  Data(std::vector<int> derivedCounts, std::vector<int> totalCounts,
+       std::vector<int> physPositions, std::vector<float> genPositions,
+       bool usingCSFS, bool foldData);
+
+  /**
+   * Load genotypes for a subset of haplotypes (for streaming pair decoding).
+   * Does NOT recompute emissions — allele counts must already be set.
+   */
+  void loadSubsetGenotypes(const int8_t* haplotypes, int numSubsetHaps);
+
+  /**
+   * Clear loaded genotypes to free memory between batches.
+   */
+  void clearGenotypes();
 
   /// Number of sites in the haplotypes file for `inFileRoot`, i.e. its non-blank lines.
   static int countHapLines(std::string inFileRoot);
@@ -151,6 +188,17 @@ private:
    * @param mapFile: optional direct path to map file, used if map file is not in inFileRoot
    */
   void readMap(const std::string& inFileRoot, const std::string& mapFile = "");
+
+  /// Set recRateAtMarker from geneticPositions and physicalPositions: the genetic distance per base pair from the
+  /// previous site, or 0 where the genetic distance is 0. Site 0 takes site 1's rate.
+  void computeRecombinationRates();
+
+  /**
+   * Replace the individuals with `numHaps / 2` with placeholder names and genotypes from `haplotypes`, laid out
+   * [site * numHaps + hap] with 1 for the derived allele. Sites in siteWasFlippedDuringFolding are flipped, so that 1
+   * then means the minor allele, as it does for the allele counts.
+   */
+  void setGenotypes(const int8_t* haplotypes, int numHaps);
 
   /**
    * Subsumed functionality from FastSMC to read genetic map as a vector of pairs.
