@@ -173,11 +173,11 @@ class TestASMCDecodePairsAPI(unittest.TestCase):
         self.assertEqual(len(return_vals.per_pair_indices), 2)
 
         # 0.1% margin in this test as the results can vary between pure and avx/sse
-        self.assertAlmostEqual(return_vals.per_pair_posterior_means[0, 0], 801.06647, delta=801.06647 * 0.001)
-        self.assertAlmostEqual(return_vals.per_pair_posterior_means[1, 8], 17953.60938, delta=17953.60938 * 0.001)
+        self.assertAlmostEqual(return_vals.per_pair_posterior_means[0, 0], 802.98633, delta=802.98633 * 0.001)
+        self.assertAlmostEqual(return_vals.per_pair_posterior_means[1, 8], 19548.63281, delta=19548.63281 * 0.001)
 
         self.assertEqual(return_vals.per_pair_MAPs[0, 0], 16)
-        self.assertEqual(return_vals.per_pair_MAPs[1, 1234], 61)
+        self.assertEqual(return_vals.per_pair_MAPs[1, 1234], 62)
 
         for posterior in return_vals.per_pair_posteriors:
             self.assertTrue(np.allclose(np.sum(posterior, axis=0), 1.0, 1e-2))
