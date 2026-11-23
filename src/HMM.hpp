@@ -27,6 +27,7 @@
 #include <Eigen/Core>
 
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -73,7 +74,6 @@ class HMM
 
   Eigen::ArrayXf m_alphaBuffer;
   Eigen::ArrayXf m_betaBuffer;
-  Eigen::ArrayXf m_scalingBuffer;
   Eigen::ArrayXf m_allZeros;
 
   Eigen::Array<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> meanPost;
@@ -245,14 +245,31 @@ public:
   void decodeHapPairs(const std::vector<unsigned long>& individualsA, const std::vector<unsigned long>& individualsB,
                       unsigned from = 0u, unsigned to = 0u, float cmBurnIn = 0.5f);
 
-  /// Parallel version: splits pairs across threads, each with independent buffers.
-  /// Requires OpenMP. Falls back to sequential if nThreads <= 1 or OpenMP unavailable.
-  /// Produces only per-pair posterior means, MAPs and pair indices, which are the same as decodeHapPairs's. Throws
-  /// std::invalid_argument if per-pair posteriors, the sum of posteriors or per-pair file output are requested, or in
-  /// FastSMC mode.
+  /// Memory-efficient parallel pair decoding with forward checkpointing.
+  ///
+  /// Uses O(sqrt(T) * S * batchSize) memory per thread instead of O(T * S * batchSize) by:
+  ///   1. Forward pass: save alpha at sqrt(T) checkpoint intervals (rolling buffers)
+  ///   2. Backward pass: process segments right-to-left, re-compute alpha from checkpoint,
+  ///      fuse posterior gamma = alpha * beta inline, extract mean/MAP immediately
+  ///
+  /// This approach also improves cache locality since the working set (~sqrt(T) * S * bs floats)
+  /// fits in L2/L3 cache, unlike the full-table approach which strides through multi-GB buffers.
+  ///
+  /// Supports posterior mean and MAP output only. For features requiring full posterior tables
+  /// (sum-over-pairs, per-pair posterior storage, file output), use the sequential path.
+  /// Throws std::invalid_argument if per-pair posteriors, the sum of posteriors or per-pair file output are
+  /// requested, or in FastSMC mode.
+  ///
+  /// Batches are decoded on nThreads OpenMP threads (one if nThreads < 1, or without OpenMP). The posterior means and
+  /// MAPs are bit-identical to decodeHapPairs's for any number of threads.
   void decodeHapPairsParallel(const std::vector<unsigned long>& individualsA,
                               const std::vector<unsigned long>& individualsB,
                               unsigned from, unsigned to, float cmBurnIn, int nThreads);
+
+  /// Number of sites per segment in decodeHapPairsParallel's checkpointing, for a window of `numSites` sites
+  /// including burn-in. About sqrt(numSites), which minimises the checkpoints plus one segment of alpha. At least 256,
+  /// so that short windows are not split into many segments.
+  static unsigned checkpointSegmentLength(unsigned numSites);
 
   /// decode a single pair over a segment of the genome
   ///
@@ -357,20 +374,120 @@ private:
   // decode a batch
   void decodeBatch(const std::vector<PairObservations>& obsBatch, unsigned from, unsigned to);
 
-  // Forward pass: write alpha into alphaBuffer. Used by both sequential and parallel paths.
-  // allZeros holds zeros laid out like obsIsZero (site * curBatchSize + pair); it stands in for the observations in
-  // the homozygous step of sequence mode. It is not modified, but the step functions take non-const references.
-  void forwardPassInto(Eigen::Ref<Eigen::ArrayXf> alphaBuffer, Eigen::Ref<Eigen::ArrayXf> scalingBuffer,
-                       Eigen::Ref<Eigen::ArrayXf> allZeros,
-                       Eigen::Ref<Eigen::ArrayXf> obsIsZero, Eigen::Ref<Eigen::ArrayXf> obsIsTwo,
-                       int curBatchSize, unsigned from, unsigned to);
+  /// Observation indicators for one batch of pairs, as filled by fillBatchObservations in HMM.cpp. Each array is laid
+  /// out [site * batchSize + pair] over the whole chromosome. The step functions take non-const references, but none
+  /// of these arrays is modified.
+  struct BatchObservations {
+    Eigen::Ref<Eigen::ArrayXf> isZero;   // 1 where neither haplotype carries the minor allele, else 0
+    Eigen::Ref<Eigen::ArrayXf> isTwo;    // 1 where both haplotypes carry it, else 0
+    Eigen::Ref<Eigen::ArrayXf> allZeros; // zeros: the observations in the homozygous step of sequence mode
+    int batchSize;                       // pairs in the batch, a multiple of the SIMD lane count
+  };
 
-  // Backward pass: write beta into betaBuffer. Used by both sequential and parallel paths. allZeros as in
-  // forwardPassInto.
-  void backwardPassInto(Eigen::Ref<Eigen::ArrayXf> betaBuffer, Eigen::Ref<Eigen::ArrayXf> scalingBuffer,
-                        Eigen::Ref<Eigen::ArrayXf> allZeros,
-                        Eigen::Ref<Eigen::ArrayXf> obsIsZero, Eigen::Ref<Eigen::ArrayXf> obsIsTwo,
-                        int curBatchSize, unsigned from, unsigned to);
+  /// Scratch vectors for one batch, used by the batched step functions. All are laid out [state * batchSize + pair]
+  /// or [pair].
+  struct BatchStepScratch {
+    BatchStepScratch(int numStates, int batchSize);
+    Eigen::ArrayXf alphaC;       // [state][pair]: suffix sums of the previous alpha over states
+    Eigen::ArrayXf AU;           // [pair]: running "above" term of the forward step
+    Eigen::ArrayXf vec;          // [state][pair]: next beta times the emission
+    Eigen::ArrayXf BU;           // [state][pair]: "above" terms of the backward step
+    Eigen::ArrayXf BL;           // [pair]: "below" term of the backward step
+    Eigen::ArrayXf sums;         // [pair]: sums over states, for rescaling
+    Eigen::ArrayXf scaling;      // [pair]: rescaling factors
+    Eigen::ArrayXf betweenSteps; // [state][pair]: alpha or beta between the two steps of a sequence-mode site
+  };
+
+  /// Set alpha at site `from` to the initial state probabilities times the emission there, rescaled to sum to 1.
+  void initialAlphaBatched(const BatchObservations& obs, unsigned from, Eigen::Ref<Eigen::ArrayXf> alpha,
+                           BatchStepScratch& scratch);
+
+  /// Compute alpha at site `pos` from alpha at `pos - 1`, rescaling it if `pos` is a multiple of scalingSkip. In
+  /// sequence mode this takes two steps: across the homozygous gap before the marker, then the marker itself.
+  void forwardStepBatched(long int pos, Eigen::Ref<Eigen::ArrayXf> previousAlpha, Eigen::Ref<Eigen::ArrayXf> nextAlpha,
+                          const BatchObservations& obs, BatchStepScratch& scratch);
+
+  /// Set beta at the last site of a window to 1, rescaled to sum to 1.
+  void initialBetaBatched(Eigen::Ref<Eigen::ArrayXf> beta, BatchStepScratch& scratch);
+
+  /// Compute beta at site `pos` from beta at `pos + 1`, rescaling it if `pos` is a multiple of scalingSkip. In
+  /// sequence mode this undoes forwardStepBatched's two steps from `pos` to `pos + 1` in reverse order.
+  void backwardStepBatched(long int pos, Eigen::Ref<Eigen::ArrayXf> nextBeta, Eigen::Ref<Eigen::ArrayXf> beta,
+                           const BatchObservations& obs, BatchStepScratch& scratch);
+
+  /// Full forward pass over sites [from, to), storing every site's alpha in alphaBuffer, laid out
+  /// [(site * states + state) * batchSize + pair].
+  void forwardPassInto(Eigen::Ref<Eigen::ArrayXf> alphaBuffer, const BatchObservations& obs, unsigned from,
+                       unsigned to);
+
+  /// Full backward pass over sites [from, to), storing every site's beta in betaBuffer, laid out as in forwardPassInto.
+  void backwardPassInto(Eigen::Ref<Eigen::ArrayXf> betaBuffer, const BatchObservations& obs, unsigned from,
+                        unsigned to);
+
+  /// The sites decoded for a batch, including burn-in, and the sites whose results are kept.
+  struct DecodingWindow {
+    unsigned decodeFrom; // first site decoded
+    unsigned decodeTo;   // one past the last site decoded
+    unsigned keepFrom;   // first site whose results are kept
+    unsigned keepTo;     // one past the last site whose results are kept
+  };
+
+  /// A batch of pairs for decodeHapPairsParallel: pairs [firstPair, firstPair + numPairs) of the request, padded to a
+  /// multiple of the SIMD lane count by repeating the last pair.
+  struct PairBatch {
+    std::vector<PairObservations> pairs;
+    std::size_t firstPair = 0;
+    std::size_t numPairs = 0;
+  };
+
+  /// Posterior means and MAP states for one batch, indexed (pair in batch, site - keepFrom). Only the arrays for the
+  /// requested outputs are sized.
+  struct BatchSummaries {
+    Eigen::Array<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> posteriorMeans;
+    Eigen::Array<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> maps;
+  };
+
+  /// Buffers for decoding batches with forward checkpointing, owned by one thread and reused across its batches.
+  struct CheckpointedDecodeBuffers {
+    CheckpointedDecodeBuffers(long int numSites, int numStates, int batchSize, unsigned numSegments,
+                              unsigned segmentLength);
+    Eigen::ArrayXf obsIsZero;       // [site][pair], see BatchObservations
+    Eigen::ArrayXf obsIsTwo;        // [site][pair]
+    Eigen::ArrayXf allZeros;        // [site][pair]
+    Eigen::ArrayXf checkpointAlpha; // [segment][state][pair]: alpha at the first site of each segment
+    Eigen::ArrayXf segmentAlpha;    // [site in segment][state][pair]: alpha recomputed for the current segment
+    Eigen::ArrayXf beta;            // [state][pair]: beta at the current site
+    Eigen::ArrayXf nextBeta;        // [state][pair]: beta at the site after it
+    Eigen::ArrayXf posteriorSums;   // [pair]: scratch for normalising the posterior at one site
+    Eigen::ArrayXf mapValue;        // [pair]: largest posterior so far at one site
+  };
+
+  /// Make the observations for the pairs (hapsA[i], hapsB[i]) and group them into padded batches of m_batchSize.
+  std::vector<PairBatch> makePairBatches(const std::vector<unsigned long>& hapsA,
+                                         const std::vector<unsigned long>& hapsB, const DecodingWindow& window);
+
+  /// Decode one batch with forward checkpointing and store its posterior means and MAPs. Alpha is kept only at the
+  /// first site of each segment and recomputed one segment at a time, while beta is computed from right to left.
+  /// Uses O((numSegments + segmentLength) * states * batchSize) memory instead of O(sites * states * batchSize). The
+  /// results are bit-identical to decodeBatch followed by writePerPairOutput.
+  void decodeBatchCheckpointed(const PairBatch& batch, const DecodingWindow& window, unsigned segmentLength,
+                               CheckpointedDecodeBuffers& buffers, BatchSummaries& summaries);
+
+  /// Forward pass of decodeBatchCheckpointed: store alpha at the first site of every segment in checkpointAlpha.
+  void forwardPassCheckpointed(const BatchObservations& obs, const DecodingWindow& window, unsigned segmentLength,
+                               CheckpointedDecodeBuffers& buffers, BatchStepScratch& scratch);
+
+  /// Recompute alpha at sites [segmentStart, segmentEnd) into segmentAlpha, from the checkpoint at segmentStart.
+  void recomputeSegmentAlpha(const BatchObservations& obs, unsigned segment, unsigned segmentStart, unsigned segmentEnd,
+                             CheckpointedDecodeBuffers& buffers, BatchStepScratch& scratch);
+
+  /// Turn alpha at one site into the posterior (alpha * beta, normalised over states), in place, and add it to the
+  /// posterior means and MAPs of the batch's real (unpadded) pairs at column `offset`.
+  void summarisePosteriorAtSite(Eigen::Ref<Eigen::ArrayXf> alpha, int batchSize, std::size_t numPairs, long int offset,
+                                CheckpointedDecodeBuffers& buffers, BatchSummaries& summaries);
+
+  /// Copy each batch's summaries and pair indices into m_decodePairsReturnStruct, in the order the pairs were given.
+  void storeBatchSummaries(const std::vector<PairBatch>& batches, const std::vector<BatchSummaries>& summaries);
 
   // Sequential wrappers using class-level buffers
   void forwardBatch(Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch, Eigen::Ref<Eigen::ArrayXf> obsIsTwoBatch,
