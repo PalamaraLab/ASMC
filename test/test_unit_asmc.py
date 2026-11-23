@@ -182,6 +182,38 @@ class TestASMCDecodePairsAPI(unittest.TestCase):
         for posterior in return_vals.per_pair_posteriors:
             self.assertTrue(np.allclose(np.sum(posterior, axis=0), 1.0, 1e-2))
 
+    def test_decode_pairs_parallel_matches_decode_pairs(self):
+
+        input_files_root = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300.array')
+        dq_file = str(data_dir / 'decoding_quantities' / '30-100-2000_CEU.decodingQuantities.gz')
+
+        asmc = ASMC(input_files_root, dq_file)
+        asmc.set_store_per_pair_map(True)
+
+        # 70 pairs fill more than one batch at the default batch size of 64
+        a = list(range(0, 140, 2))
+        b = list(range(299, 89, -3))
+        asmc.decode_pairs(a, b)
+        expected = asmc.get_copy_of_results()
+
+        asmc.decode_pairs_parallel(a, b, n_threads=2)
+        actual = asmc.get_copy_of_results()
+
+        self.assertEqual(actual.per_pair_indices, expected.per_pair_indices)
+        self.assertTrue(np.array_equal(actual.per_pair_posterior_means, expected.per_pair_posterior_means))
+        self.assertTrue(np.array_equal(actual.per_pair_MAPs, expected.per_pair_MAPs))
+
+    def test_decode_pairs_parallel_rejects_full_posteriors(self):
+
+        input_files_root = str(data_dir / 'examples' / 'asmc' / 'exampleFile.n300.array')
+        dq_file = str(data_dir / 'decoding_quantities' / '30-100-2000_CEU.decodingQuantities.gz')
+
+        asmc = ASMC(input_files_root, dq_file)
+        asmc.set_store_per_pair_posterior(True)
+
+        with self.assertRaises(ValueError):
+            asmc.decode_pairs_parallel([1, 2], [3, 4], n_threads=2)
+
 
 if __name__ == "__main__":
     unittest.main()

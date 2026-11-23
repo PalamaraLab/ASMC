@@ -246,6 +246,8 @@ PYBIND11_MODULE(asmc_python_bindings, m)
           "decode_pairs",
           py::overload_cast<const std::vector<std::string>&, const std::vector<std::string>&, unsigned, unsigned, float>(&ASMC::ASMC::decodePairs),
           "hap_ids_a"_a, "hap_ids_b"_a, "from"_a = 0, "to"_a = 0, "cm_burn_in"_a = 0.5)
+      .def("decode_pairs_parallel", &ASMC::ASMC::decodePairsParallel,
+           "hap_indices_a"_a, "hap_indices_b"_a, "from"_a = 0, "to"_a = 0, "cm_burn_in"_a = 0.5, "n_threads"_a = 4)
       .def("get_copy_of_results", &ASMC::ASMC::getCopyOfResults, py::return_value_policy::copy)
       .def("get_ref_of_results", &ASMC::ASMC::getRefOfResults, py::return_value_policy::reference_internal)
       .def("get_expected_times", &ASMC::ASMC::getExpectedTimes, py::return_value_policy::reference_internal)

@@ -137,6 +137,7 @@ set(ASMC_unit_tests
         ${ASMC_test_dir}/test_HMM.cpp
         ${ASMC_test_dir}/test_hmm_posteriors.cpp
         ${ASMC_test_dir}/test_hmm_utils.cpp
+        ${ASMC_test_dir}/test_parallel_decoding.cpp
         ${ASMC_test_dir}/test_string_utils.cpp
         ${ASMC_test_dir}/test_test_fixtures.cpp
         ${ASMC_test_dir}/test_decoding_params.cpp
@@ -200,6 +201,30 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(fmt)
 target_link_libraries(ASMC PRIVATE fmt::fmt)
+
+# OpenMP for parallel pair decoding. Optional: without it, decodePairsParallel decodes on one thread.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    # Apple Clang ships without an OpenMP runtime, so point it at Homebrew's libomp if there is one
+    find_program(BREW_EXECUTABLE brew)
+    if(BREW_EXECUTABLE)
+        execute_process(COMMAND ${BREW_EXECUTABLE} --prefix libomp OUTPUT_VARIABLE LIBOMP_PREFIX
+                        OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    endif()
+    if(LIBOMP_PREFIX AND EXISTS "${LIBOMP_PREFIX}/include/omp.h")
+        set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include" CACHE STRING "" FORCE)
+        set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include" CACHE STRING "" FORCE)
+        set(OpenMP_C_LIB_NAMES "omp" CACHE STRING "" FORCE)
+        set(OpenMP_CXX_LIB_NAMES "omp" CACHE STRING "" FORCE)
+        set(OpenMP_omp_LIBRARY "${LIBOMP_PREFIX}/lib/libomp.dylib" CACHE FILEPATH "" FORCE)
+    endif()
+endif()
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(ASMC PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "OpenMP found - parallel pair decoding enabled")
+else()
+    message(STATUS "OpenMP not found - parallel pair decoding will fall back to sequential")
+endif()
 
 # Fetch range-v3
 set(RANGE_V3_TESTS OFF CACHE BOOL "Disable range-v3 tests")

@@ -62,7 +62,7 @@ jobs:
 
       - name: install dependencies
         run: |
-          brew install boost zlib
+          brew install boost zlib libomp
 
       - name: make build directory
         run: mkdir -p build_dir
