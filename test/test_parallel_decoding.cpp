@@ -24,8 +24,11 @@
 #include <vector>
 
 #include "ASMC.hpp"
+#include "Data.hpp"
 #include "DecodePairsReturnStruct.hpp"
 #include "DecodingParams.hpp"
+#include "HMM.hpp"
+#include "HmmUtils.hpp"
 
 namespace
 {
@@ -81,7 +84,48 @@ void checkParallelMatchesSequential(ASMC::ASMC& asmc, const TestPairs& pairs, co
   }
 }
 
+/**
+ * A window [from, to), starting from site 1000 onwards, whose decoded sites, burn-in of 0.5 cM included, number
+ * `numSegments` checkpoint segments plus `extraSites`. The burn-in moves in steps as the window grows, so both ends
+ * are searched. Returns {0, 0} if there is none.
+ */
+std::pair<unsigned, unsigned> findWindow(const Data& data, const unsigned numSegments, const unsigned extraSites)
+{
+  const auto numSites = static_cast<unsigned>(data.sites);
+  for (unsigned from = 1000u; from < 2000u; ++from) {
+    const unsigned decodedFrom = asmc::getFromPosition(data.geneticPositions, from, 0.5f);
+    for (unsigned to = from + 1u; to <= numSites; ++to) {
+      const unsigned decodedSites = asmc::getToPosition(data.geneticPositions, to, 0.5f) - decodedFrom;
+      if (decodedSites == numSegments * HMM::checkpointSegmentLength(decodedSites) + extraSites) {
+        return {from, to};
+      }
+      if (decodedSites > numSegments * HMM::checkpointSegmentLength(decodedSites) + extraSites) {
+        break;
+      }
+    }
+  }
+  return {0u, 0u};
+}
+
 } // namespace
+
+TEST_CASE("parallel decoding matches decodePairs at checkpoint segment boundaries", "[ASMC][parallel]")
+{
+  const DecodingParams params = makeParams(ASMC_DATA_DIR "/examples/asmc/exampleFile.n300.array", "array");
+  const Data data(params);
+  ASMC::ASMC asmc(params);
+  asmc.setStorePerPairMap();
+
+  // {segments, extra sites}: whole segments only, one site into a new segment, a partial last segment, and fewer
+  // sites than one segment
+  const std::vector<std::pair<unsigned, unsigned>> layouts = {{2u, 0u}, {2u, 1u}, {1u, 255u}, {0u, 100u}};
+  for (const auto& [numSegments, extraSites] : layouts) {
+    INFO(numSegments << " segments and " << extraSites << " sites");
+    const auto [from, to] = findWindow(data, numSegments, extraSites);
+    REQUIRE(to > 0u);
+    checkParallelMatchesSequential(asmc, TestPairs(37ul), from, to);
+  }
+}
 
 TEST_CASE("parallel decoding matches decodePairs in array mode", "[ASMC][parallel]")
 {

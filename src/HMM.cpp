@@ -142,8 +142,6 @@ HMM::HMM(Data _data, const DecodingParams& _decodingParams, int _scalingSkip)
 
   // allocate buffers (alpha/beta are lazy-allocated on first sequential decode,
   // so parallel checkpointed path avoids the O(T*S*bs) allocation)
-  m_scalingBuffer.resize(m_batchSize);
-
   m_allZeros.resize(sequenceLength * m_batchSize);
   m_allZeros.setZero();
 
@@ -539,8 +537,7 @@ void HMM::decodeHapPairsParallel(const std::vector<unsigned long>& hapsA, const 
                                   const unsigned from, unsigned to, const float cmBurnIn, int nThreads)
 {
   // The parallel path produces only per-pair posterior means and MAPs, so reject anything else rather than leave it
-  // empty. Checked before the fallbacks below so that the same requests fail with or without OpenMP. Posterior sums
-  // (doPosteriorSums) are not rejected: decodePairs never returns them.
+  // empty. Posterior sums (doPosteriorSums) are not rejected: decodePairs never returns them.
   if (m_storePerPairPosterior || m_storeSumOfPosterior || m_writePerPairPosteriorMean || m_writePerPairMAP ||
       decodingParams.FastSMC) {
     throw std::invalid_argument(
@@ -548,435 +545,227 @@ void HMM::decodeHapPairsParallel(const std::vector<unsigned long>& hapsA, const 
         "storing the sum of posteriors and writing per-pair output, or use decodePairs.");
   }
 
-#ifndef _OPENMP
-  // Fall back to sequential if OpenMP not available
-  decodeHapPairs(hapsA, hapsB, from, to, cmBurnIn);
-  finishDecoding();
-  return;
-#else
-  // Always use checkpointed path (even nThreads=1) for O(sqrt(T)) memory.
-  // OpenMP with 1 thread has negligible overhead vs the memory savings.
-  if (nThreads < 1) nThreads = 1;
-
-  const unsigned seqLength = static_cast<unsigned>(data.sites);
-  if (to == 0u) to = seqLength;
-  if (from >= to || to > seqLength) {
+  const auto numSites = static_cast<unsigned>(data.sites);
+  if (to == 0u) {
+    to = numSites;
+  }
+  if (from >= to || to > numSites) {
     throw std::runtime_error(
-      fmt::format("Require 0 <= from < to <= sequenceLength but got {} < {} <= {}\n", from, to, seqLength));
+        fmt::format("Require 0 <= from < to <= sequenceLength but got {} < {} <= {}\n", from, to, numSites));
+  }
+  if (hapsA.size() != hapsB.size()) {
+    throw std::runtime_error("vector of A indices must be the same size as vector of B indices");
   }
 
+  // Record the window as decodeHapPairs does: updateOutputStructures sizes the per-pair output from it
   std::fill(fromBatch.begin(), fromBatch.end(), from);
   std::fill(toBatch.begin(), toBatch.end(), to);
   mCmBurnIn = cmBurnIn;
   updateOutputStructures();
 
-  const size_t numPairs = hapsA.size();
+  const DecodingWindow window{asmc::getFromPosition(data.geneticPositions, from, mCmBurnIn),
+                              asmc::getToPosition(data.geneticPositions, to, mCmBurnIn), from, to};
+  const std::vector<PairBatch> batches = makePairBatches(hapsA, hapsB, window);
+  std::vector<BatchSummaries> summaries(batches.size());
 
-  // Pre-compute all PairObservations
-  std::vector<PairObservations> allObs(numPairs);
-  for (size_t i = 0; i < numPairs; ++i) {
-    auto [iInd, iHap] = asmc::hapToDipId(hapsA[i]);
-    auto [jInd, jHap] = asmc::hapToDipId(hapsB[i]);
-    allObs[i] = makePairObs(static_cast<int_least8_t>(iHap), iInd,
-                            static_cast<int_least8_t>(jHap), jInd);
-  }
+  const unsigned decodedSites = window.decodeTo - window.decodeFrom;
+  const unsigned segmentLength = checkpointSegmentLength(decodedSites);
+  const unsigned numSegments = (decodedSites + segmentLength - 1) / segmentLength;
 
-  // Compute burn-in adjusted from/to
-  unsigned adjFrom = asmc::getFromPosition(data.geneticPositions, from, mCmBurnIn);
-  unsigned adjTo = asmc::getToPosition(data.geneticPositions, to, mCmBurnIn);
-
-  // Make bits for all observations
-  if (adjFrom > 0u || adjTo < seqLength) {
-    for (auto& obs : allObs) {
-      makeBits(obs, adjFrom, adjTo);
-    }
-  }
-
-  // Group into SIMD batches
-  const int batchSz = m_batchSize;
-  std::vector<std::vector<PairObservations>> batches;
-  std::vector<std::vector<size_t>> batchPairIndices; // original pair index for output
-
-  for (size_t i = 0; i < numPairs; i += batchSz) {
-    size_t end = std::min(i + static_cast<size_t>(batchSz), numPairs);
-    std::vector<PairObservations> batch(allObs.begin() + i, allObs.begin() + end);
-    std::vector<size_t> indices;
-    for (size_t j = i; j < end; j++) indices.push_back(j);
-
-    size_t actualSize = batch.size();
-    // Pad to SIMD lane multiple
-    while (batch.size() % asmc::getNumSimdLanes() != 0) {
-      batch.push_back(batch.back());
-    }
-
-    batches.push_back(std::move(batch));
-    batchPairIndices.push_back(std::move(indices));
-  }
-
-  const size_t numBatches = batches.size();
-  const long int seqFrom = static_cast<long int>(from);
-  const long int seqTo = static_cast<long int>(to);
-  const unsigned seqLen = to - from;
-
-  // Per-batch output storage
-  struct BatchResult {
-    Eigen::Array<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> posteriorMeans;
-    Eigen::Array<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> maps;
-    size_t actualSize;
-  };
-  std::vector<BatchResult> batchResults(numBatches);
-
-  // Checkpoint interval: sqrt(T) for O(sqrt(T) * S * bs) memory per thread
-  // instead of O(T * S * bs). Time cost: ~2x forward pass.
-  const unsigned adjSeqLen = adjTo - adjFrom;
-  const unsigned ckptInterval = std::max(256u, static_cast<unsigned>(std::sqrt(static_cast<double>(adjSeqLen))));
-  const unsigned numCkpt = (adjSeqLen + ckptInterval - 1) / ckptInterval;
-  const long int sbMax = static_cast<long int>(states) * batchSz;
-
-// A num_threads clause rather than omp_set_num_threads, which would change the thread count for any other OpenMP
-// code in the process (for example numpy's, when called from Python).
-#pragma omp parallel num_threads(nThreads)
+  // Batches are independent, and each thread has its own buffers. Without OpenMP the pragmas are ignored and the
+  // batches are decoded in turn, with the same results. A num_threads clause, rather than omp_set_num_threads, leaves
+  // the thread count of any other OpenMP code in the process unchanged (for example numpy's, when called from Python).
+#pragma omp parallel num_threads(std::max(nThreads, 1))
   {
-    // Thread-local buffers — checkpointed
-    Eigen::ArrayXf localScaling(batchSz);
-    Eigen::ArrayXf localAllZeros(seqLength * batchSz);
-    localAllZeros.setZero();
-
-    // Checkpoint alpha: sqrt(T) snapshots, segment buffer for re-computation
-    Eigen::ArrayXf checkpointAlpha(numCkpt * sbMax);
-    Eigen::ArrayXf segmentAlpha((ckptInterval + 1) * sbMax);
-    // Beta: only two consecutive vectors instead of full table
-    Eigen::ArrayXf betaCurr(sbMax);
-    Eigen::ArrayXf betaNext(sbMax);
-
-    Eigen::Array<float, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> localMeanPost;
-    Eigen::Array<int, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> localMAP;
-    Eigen::ArrayXf localMAPValue;
-
-    if (m_calculatePerPairPosteriorMean) {
-      localMeanPost.resize(batchSz, seqLen);
-    }
-    if (m_calculatePerPairMAP) {
-      localMAP.resize(batchSz, seqLen);
-      localMAPValue.resize(batchSz);
-    }
-
+    CheckpointedDecodeBuffers buffers(sequenceLength, states, m_batchSize, numSegments, segmentLength);
 #pragma omp for schedule(dynamic)
-    for (size_t bIdx = 0; bIdx < numBatches; ++bIdx) {
-      auto& batch = batches[bIdx];
-      int curBatchSize = static_cast<int>(batch.size());
-      size_t actualSize = batchPairIndices[bIdx].size();
-      const long int sb = static_cast<long int>(states) * curBatchSize;
-
-      // Build observation bit arrays
-      Eigen::ArrayXf obsIsZero(seqLength * curBatchSize);
-      Eigen::ArrayXf obsIsTwo(seqLength * curBatchSize);
-      fillBatchObservations(batch, adjFrom, adjTo, obsIsZero, obsIsTwo);
-
-      // ================================================================
-      // PHASE 1: Forward pass with checkpointing
-      // Rolling alphaPrev/alphaCurr, save snapshots at sqrt(T) boundaries.
-      // ================================================================
-      Eigen::ArrayXf alphaPrev(sb);
-      Eigen::ArrayXf alphaCurr(sb);
-
-      // Initialize alpha at adjFrom
-      for (int k = 0; k < states; k++) {
-        for (int v = 0; v < curBatchSize; v++) {
-          float firstEmission = emission1AtSite[adjFrom][k] +
-                                emission0minus1AtSite[adjFrom][k] * obsIsZero[adjFrom * curBatchSize + v] +
-                                emission2minus0AtSite[adjFrom][k] * obsIsTwo[adjFrom * curBatchSize + v];
-          alphaCurr[k * curBatchSize + v] = m_decodingQuant.initialStateProb[k] * firstEmission;
-        }
-      }
-      {
-        Eigen::ArrayXf sums(curBatchSize);
-        asmc::calculateScalingBatch(alphaCurr, localScaling, sums, curBatchSize, states);
-        asmc::applyScalingBatch(alphaCurr, localScaling, curBatchSize, states);
-      }
-
-      checkpointAlpha.segment(0, sb) = alphaCurr;
-
-      {
-        Eigen::ArrayXf alphaC(sb);
-        Eigen::ArrayXf AU(curBatchSize);
-        Eigen::ArrayXf sums(curBatchSize);
-        Eigen::ArrayXf alphaTemp(sb);
-
-        float lastGeneticPos = data.geneticPositions[adjFrom];
-        int lastPhysicalPos = data.physicalPositions[adjFrom];
-
-        for (long int pos = adjFrom + 1; pos < adjTo; pos++) {
-          float recDist = asmc::roundMorgans(data.geneticPositions[pos] - lastGeneticPos, precision, minGenetic);
-          alphaPrev = alphaCurr;
-
-          if (decodingParams.decodingSequence) {
-            float currentRecRate = asmc::roundMorgans(data.recRateAtMarker[pos], precision, minGenetic);
-            int physDist = asmc::roundPhysical(data.physicalPositions[pos] - lastPhysicalPos - 1, precision);
-            float recDistM1 = asmc::roundMorgans(recDist - currentRecRate, precision, minGenetic);
-            auto homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDist);
-            getNextAlphaBatched(recDistM1, alphaC, curBatchSize, alphaPrev, pos, localAllZeros, localAllZeros,
-                                AU, alphaTemp, homozEmission, homozEmission, homozEmission);
-            getNextAlphaBatched(currentRecRate, alphaC, curBatchSize, alphaTemp, pos, obsIsZero, obsIsTwo, AU,
-                                alphaCurr, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
-          } else {
-            getNextAlphaBatched(recDist, alphaC, curBatchSize, alphaPrev, pos, obsIsZero, obsIsTwo,
-                                AU, alphaCurr, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
-          }
-
-          if (pos % scalingSkip == 0) {
-            asmc::calculateScalingBatch(alphaCurr, localScaling, sums, curBatchSize, states);
-            asmc::applyScalingBatch(alphaCurr, localScaling, curBatchSize, states);
-          }
-
-          unsigned relPos = static_cast<unsigned>(pos - adjFrom);
-          if (relPos % ckptInterval == 0) {
-            checkpointAlpha.segment(static_cast<long int>(relPos / ckptInterval) * sb, sb) = alphaCurr;
-          }
-
-          lastGeneticPos = data.geneticPositions[pos];
-          lastPhysicalPos = data.physicalPositions[pos];
-        }
-      }
-
-      // ================================================================
-      // PHASE 2: Backward with fused posterior
-      // Process segments right-to-left: re-run forward from checkpoint,
-      // compute beta with rolling buffers, fuse gamma = alpha*beta inline.
-      // ================================================================
-      BatchResult result;
-      result.actualSize = actualSize;
-
-      if (m_calculatePerPairPosteriorMean) localMeanPost.setZero();
-      if (m_calculatePerPairMAP) localMAP.setZero();
-
-      // Initialize beta at last position
-      for (int k = 0; k < states; k++) {
-        for (int v = 0; v < curBatchSize; v++) {
-          betaCurr[k * curBatchSize + v] = 1.0f;
-        }
-      }
-      {
-        Eigen::ArrayXf sums(curBatchSize);
-        asmc::calculateScalingBatch(betaCurr, localScaling, sums, curBatchSize, states);
-        asmc::applyScalingBatch(betaCurr, localScaling, curBatchSize, states);
-      }
-
-      Eigen::ArrayXf BL(curBatchSize);
-      Eigen::ArrayXf BU(sb);
-      Eigen::ArrayXf vec(sb);
-      Eigen::ArrayXf fwdAlphaC(sb);
-      Eigen::ArrayXf fwdAU(curBatchSize);
-      Eigen::ArrayXf fwdSums(curBatchSize);
-      Eigen::ArrayXf fwdAlphaTemp(sb);
-      Eigen::ArrayXf posterior(sb);
-      Eigen::ArrayXf posteriorSums(curBatchSize);
-
-      for (int seg = static_cast<int>(numCkpt) - 1; seg >= 0; seg--) {
-        unsigned segStart = adjFrom + static_cast<unsigned>(seg) * ckptInterval;
-        unsigned segEnd = std::min(segStart + ckptInterval, static_cast<unsigned>(adjTo));
-        unsigned segLen = segEnd - segStart;
-
-        // Re-run forward from checkpoint to fill segmentAlpha for this segment
-        segmentAlpha.segment(0, sb) = checkpointAlpha.segment(static_cast<long int>(seg) * sb, sb);
-
-        if (segLen > 1) {
-          float lastGeneticPos = data.geneticPositions[segStart];
-          int lastPhysicalPos = data.physicalPositions[segStart];
-
-          for (unsigned i = 1; i < segLen; i++) {
-            long int pos = segStart + i;
-            float recDist = asmc::roundMorgans(data.geneticPositions[pos] - lastGeneticPos, precision, minGenetic);
-            Eigen::Map<Eigen::ArrayXf> prevA(segmentAlpha.data() + (i - 1) * sb, sb);
-            Eigen::Map<Eigen::ArrayXf> nextA(segmentAlpha.data() + i * sb, sb);
-
-            if (decodingParams.decodingSequence) {
-              float currentRecRate = asmc::roundMorgans(data.recRateAtMarker[pos], precision, minGenetic);
-              int physDist = asmc::roundPhysical(data.physicalPositions[pos] - lastPhysicalPos - 1, precision);
-              float recDistM1 = asmc::roundMorgans(recDist - currentRecRate, precision, minGenetic);
-              auto homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDist);
-              getNextAlphaBatched(recDistM1, fwdAlphaC, curBatchSize, prevA, pos, localAllZeros, localAllZeros,
-                                  fwdAU, fwdAlphaTemp, homozEmission, homozEmission, homozEmission);
-              getNextAlphaBatched(currentRecRate, fwdAlphaC, curBatchSize, fwdAlphaTemp, pos, obsIsZero, obsIsTwo,
-                                  fwdAU, nextA, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
-            } else {
-              getNextAlphaBatched(recDist, fwdAlphaC, curBatchSize, prevA, pos, obsIsZero, obsIsTwo,
-                                  fwdAU, nextA, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
-            }
-
-            if (pos % scalingSkip == 0) {
-              asmc::calculateScalingBatch(nextA, localScaling, fwdSums, curBatchSize, states);
-              asmc::applyScalingBatch(nextA, localScaling, curBatchSize, states);
-            }
-            lastGeneticPos = data.geneticPositions[pos];
-            lastPhysicalPos = data.physicalPositions[pos];
-          }
-        }
-
-        // For last segment: betaCurr = beta at segEnd-1 (initialized to 1.0).
-        // For other segments: betaCurr = beta at segEnd (from previous segment's processing).
-        bool isLastSeg = (seg == static_cast<int>(numCkpt) - 1);
-
-        // Fuse posterior at rightmost position only for last segment
-        // (where betaCurr is already at segEnd-1)
-        if (isLastSeg) {
-          long int pos = segEnd - 1;
-          unsigned segIdx = static_cast<unsigned>(pos - segStart);
-          Eigen::Map<Eigen::ArrayXf> alphaAtPos(segmentAlpha.data() + segIdx * sb, sb);
-
-          posterior = alphaAtPos * betaCurr;
-          posteriorSums.setZero();
-          for (int k = 0; k < states; k++) {
-            for (int v = 0; v < curBatchSize; v++) {
-              posteriorSums[v] += posterior[k * curBatchSize + v];
-            }
-          }
-          for (int k = 0; k < states; k++) {
-            for (int v = 0; v < curBatchSize; v++) {
-              if (posteriorSums[v] > 0.0f) posterior[k * curBatchSize + v] /= posteriorSums[v];
-            }
-          }
-
-          if (pos >= seqFrom && pos < seqTo) {
-            long int offset = pos - seqFrom;
-            if (m_calculatePerPairPosteriorMean) {
-              for (int k = 0; k < states; k++) {
-                for (int v = 0; v < static_cast<int>(actualSize); v++) {
-                  localMeanPost(v, offset) += posterior[k * curBatchSize + v] * expectedCoalTimes[k];
-                }
-              }
-            }
-            if (m_calculatePerPairMAP) {
-              localMAPValue.setZero();
-              for (int k = 0; k < states; k++) {
-                for (int v = 0; v < static_cast<int>(actualSize); v++) {
-                  float val = posterior[k * curBatchSize + v];
-                  if (localMAPValue[v] < val) {
-                    localMAP(v, offset) = k;
-                    localMAPValue[v] = val;
-                  }
-                }
-              }
-            }
-          }
-        }
-
-        // Backward loop: from segEnd-2 (last seg) or segEnd-1 (others) down to segStart.
-        // For non-last segments, first iteration computes beta at segEnd-1 from beta at segEnd.
-        long int loopStart = isLastSeg ? static_cast<long int>(segEnd) - 2 : static_cast<long int>(segEnd) - 1;
-        float lastGeneticPosBwd = isLastSeg ? data.geneticPositions[segEnd - 1]
-                                            : data.geneticPositions[segEnd];
-        int lastPhysicalPosBwd = isLastSeg ? data.physicalPositions[segEnd - 1]
-                                           : data.physicalPositions[segEnd];
-
-        for (long int pos = loopStart; pos >= static_cast<long int>(segStart); pos--) {
-          float recDist = asmc::roundMorgans(lastGeneticPosBwd - data.geneticPositions[pos], precision, minGenetic);
-
-          betaNext = betaCurr;
-          if (decodingParams.decodingSequence) {
-            // Matches backwardPassInto: recRateAtMarker[pos], homoz-first order
-            float currentRecRate = asmc::roundMorgans(data.recRateAtMarker[pos], precision, minGenetic);
-            int physDist = asmc::roundPhysical(lastPhysicalPosBwd - data.physicalPositions[pos] - 1, precision);
-            float recDistM1 = asmc::roundMorgans(recDist - currentRecRate, precision, minGenetic);
-            auto homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDist);
-            getPreviousBetaBatched(recDistM1, curBatchSize, betaNext, pos, localAllZeros, localAllZeros,
-                                   vec, BU, BL, betaCurr, homozEmission, homozEmission, homozEmission);
-            betaNext = betaCurr;
-            getPreviousBetaBatched(currentRecRate, curBatchSize, betaNext, pos, obsIsZero, obsIsTwo, vec,
-                                   BU, BL, betaCurr, emission1AtSite[pos + 1],
-                                   emission0minus1AtSite[pos + 1], emission2minus0AtSite[pos + 1]);
-          } else {
-            getPreviousBetaBatched(recDist, curBatchSize, betaNext, pos, obsIsZero, obsIsTwo,
-                                   vec, BU, BL, betaCurr, emission1AtSite[pos + 1],
-                                   emission0minus1AtSite[pos + 1], emission2minus0AtSite[pos + 1]);
-          }
-
-          if (pos % scalingSkip == 0) {
-            Eigen::ArrayXf sums(curBatchSize);
-            asmc::calculateScalingBatch(betaCurr, localScaling, sums, curBatchSize, states);
-            asmc::applyScalingBatch(betaCurr, localScaling, curBatchSize, states);
-          }
-
-          // Fuse posterior
-          unsigned segIdx = static_cast<unsigned>(pos - segStart);
-          Eigen::Map<Eigen::ArrayXf> alphaAtPos(segmentAlpha.data() + segIdx * sb, sb);
-
-          posterior = alphaAtPos * betaCurr;
-          posteriorSums.setZero();
-          for (int k = 0; k < states; k++) {
-            for (int v = 0; v < curBatchSize; v++) {
-              posteriorSums[v] += posterior[k * curBatchSize + v];
-            }
-          }
-          for (int k = 0; k < states; k++) {
-            for (int v = 0; v < curBatchSize; v++) {
-              if (posteriorSums[v] > 0.0f) posterior[k * curBatchSize + v] /= posteriorSums[v];
-            }
-          }
-
-          if (pos >= seqFrom && pos < seqTo) {
-            long int offset = pos - seqFrom;
-            if (m_calculatePerPairPosteriorMean) {
-              for (int k = 0; k < states; k++) {
-                for (int v = 0; v < static_cast<int>(actualSize); v++) {
-                  localMeanPost(v, offset) += posterior[k * curBatchSize + v] * expectedCoalTimes[k];
-                }
-              }
-            }
-            if (m_calculatePerPairMAP) {
-              localMAPValue.setZero();
-              for (int k = 0; k < states; k++) {
-                for (int v = 0; v < static_cast<int>(actualSize); v++) {
-                  float val = posterior[k * curBatchSize + v];
-                  if (localMAPValue[v] < val) {
-                    localMAP(v, offset) = k;
-                    localMAPValue[v] = val;
-                  }
-                }
-              }
-            }
-          }
-
-          lastGeneticPosBwd = data.geneticPositions[pos];
-          lastPhysicalPosBwd = data.physicalPositions[pos];
-        }
-        // betaCurr now holds beta at segStart — ready for next segment
-      }
-
-      if (m_calculatePerPairPosteriorMean) {
-        result.posteriorMeans = localMeanPost.topRows(actualSize);
-      }
-      if (m_calculatePerPairMAP) {
-        result.maps = localMAP.topRows(actualSize);
-      }
-
-      batchResults[bIdx] = std::move(result);
+    for (long int batchIdx = 0; batchIdx < static_cast<long int>(batches.size()); ++batchIdx) {
+      decodeBatchCheckpointed(batches[batchIdx], window, segmentLength, buffers, summaries[batchIdx]);
     }
-  } // end omp parallel
+  }
 
-  // Merge results into m_decodePairsReturnStruct (sequential)
-  for (size_t bIdx = 0; bIdx < numBatches; ++bIdx) {
-    auto& result = batchResults[bIdx];
-    auto& indices = batchPairIndices[bIdx];
+  storeBatchSummaries(batches, summaries);
+}
 
-    for (size_t k = 0; k < indices.size(); ++k) {
-      auto outIdx = static_cast<Eigen::Index>(indices[k]);
+unsigned HMM::checkpointSegmentLength(const unsigned numSites)
+{
+  constexpr unsigned minSegmentLength = 256u;
+  return std::max(minSegmentLength, static_cast<unsigned>(std::sqrt(static_cast<double>(numSites))));
+}
 
-      unsigned long hapA = asmc::dipToHapId(allObs[indices[k]].iInd, allObs[indices[k]].iHap);
-      unsigned long hapB = asmc::dipToHapId(allObs[indices[k]].jInd, allObs[indices[k]].jHap);
-      std::string indIdA = asmc::indPlusHapToCombinedId(data.IIDList.at(allObs[indices[k]].iInd), allObs[indices[k]].iHap);
-      std::string indIdB = asmc::indPlusHapToCombinedId(data.IIDList.at(allObs[indices[k]].jInd), allObs[indices[k]].jHap);
-      m_decodePairsReturnStruct.perPairIndices.at(outIdx) = std::make_tuple(hapA, indIdA, hapB, indIdB);
+HMM::CheckpointedDecodeBuffers::CheckpointedDecodeBuffers(const long int numSites, const int numStates,
+                                                          const int batchSize, const unsigned numSegments,
+                                                          const unsigned segmentLength)
+    : obsIsZero(numSites * batchSize), obsIsTwo(numSites * batchSize),
+      allZeros(Eigen::ArrayXf::Zero(numSites * batchSize)),
+      checkpointAlpha(static_cast<long int>(numSegments) * numStates * batchSize),
+      segmentAlpha(static_cast<long int>(segmentLength) * numStates * batchSize), beta(numStates * batchSize),
+      nextBeta(numStates * batchSize), posteriorSums(batchSize), mapValue(batchSize)
+{
+}
 
+std::vector<HMM::PairBatch> HMM::makePairBatches(const std::vector<unsigned long>& hapsA,
+                                                 const std::vector<unsigned long>& hapsB, const DecodingWindow& window)
+{
+  // As in addToBatch, restrict each pair's observations to the decoded sites unless they are the whole chromosome, so
+  // that fillBatchObservations can index them from window.decodeFrom
+  const bool decodingPartOfChromosome = window.decodeFrom > 0u || window.decodeTo < sequenceLength;
+
+  std::vector<PairBatch> batches;
+  for (std::size_t firstPair = 0; firstPair < hapsA.size(); firstPair += m_batchSize) {
+    PairBatch batch;
+    batch.firstPair = firstPair;
+    batch.numPairs = std::min(static_cast<std::size_t>(m_batchSize), hapsA.size() - firstPair);
+    for (std::size_t pair = firstPair; pair < firstPair + batch.numPairs; ++pair) {
+      const auto [indA, hapA] = asmc::hapToDipId(hapsA[pair]);
+      const auto [indB, hapB] = asmc::hapToDipId(hapsB[pair]);
+      PairObservations obs = makePairObs(static_cast<int_least8_t>(hapA), static_cast<unsigned>(indA),
+                                         static_cast<int_least8_t>(hapB), static_cast<unsigned>(indB));
+      if (decodingPartOfChromosome) {
+        makeBits(obs, window.decodeFrom, window.decodeTo);
+      }
+      batch.pairs.push_back(std::move(obs));
+    }
+    // Pad to a multiple of the SIMD lane count, as runLastBatch does. The padding's results are discarded.
+    while (batch.pairs.size() % asmc::getNumSimdLanes() != 0) {
+      batch.pairs.push_back(batch.pairs.back());
+    }
+    batches.push_back(std::move(batch));
+  }
+  return batches;
+}
+
+void HMM::decodeBatchCheckpointed(const PairBatch& batch, const DecodingWindow& window, const unsigned segmentLength,
+                                  CheckpointedDecodeBuffers& buffers, BatchSummaries& summaries)
+{
+  const auto batchSize = static_cast<int>(batch.pairs.size());
+  const long int siteStride = static_cast<long int>(states) * batchSize;
+  const long int obsLength = sequenceLength * batchSize;
+  fillBatchObservations(batch.pairs, window.decodeFrom, window.decodeTo, buffers.obsIsZero.head(obsLength),
+                        buffers.obsIsTwo.head(obsLength));
+  const BatchObservations obs{buffers.obsIsZero.head(obsLength), buffers.obsIsTwo.head(obsLength),
+                              buffers.allZeros.head(obsLength), batchSize};
+  BatchStepScratch scratch(states, batchSize);
+
+  const auto numPairs = static_cast<Eigen::Index>(batch.numPairs);
+  const long int keptSites = window.keepTo - window.keepFrom;
+  if (m_calculatePerPairPosteriorMean) {
+    summaries.posteriorMeans.setZero(numPairs, keptSites);
+  }
+  if (m_calculatePerPairMAP) {
+    summaries.maps.setZero(numPairs, keptSites);
+  }
+
+  forwardPassCheckpointed(obs, window, segmentLength, buffers, scratch);
+
+  // Backward pass, segment by segment from the right. Each segment's alpha is recomputed from its checkpoint, then
+  // beta is stepped back one site at a time and combined with alpha into the posterior at that site.
+  // Invariant: on entering a segment other than the last, buffers.beta holds beta at the segment's end.
+  const unsigned numSegments = (window.decodeTo - window.decodeFrom + segmentLength - 1) / segmentLength;
+  for (unsigned segment = numSegments; segment-- > 0u;) {
+    const unsigned segmentStart = window.decodeFrom + segment * segmentLength;
+    const unsigned segmentEnd = std::min(segmentStart + segmentLength, window.decodeTo);
+    recomputeSegmentAlpha(obs, segment, segmentStart, segmentEnd, buffers, scratch);
+
+    for (long int pos = static_cast<long int>(segmentEnd) - 1; pos >= static_cast<long int>(segmentStart); --pos) {
+      if (pos == static_cast<long int>(window.decodeTo) - 1) {
+        initialBetaBatched(buffers.beta.head(siteStride), scratch);
+      } else {
+        // The beta just computed, at pos + 1, becomes nextBeta. Swapping exchanges pointers rather than copying.
+        buffers.beta.swap(buffers.nextBeta);
+        backwardStepBatched(pos, buffers.nextBeta.head(siteStride), buffers.beta.head(siteStride), obs, scratch);
+      }
+      if (pos >= static_cast<long int>(window.keepFrom) && pos < static_cast<long int>(window.keepTo)) {
+        summarisePosteriorAtSite(buffers.segmentAlpha.segment((pos - segmentStart) * siteStride, siteStride), batchSize,
+                                 batch.numPairs, pos - window.keepFrom, buffers, summaries);
+      }
+    }
+  }
+}
+
+void HMM::forwardPassCheckpointed(const BatchObservations& obs, const DecodingWindow& window,
+                                  const unsigned segmentLength, CheckpointedDecodeBuffers& buffers,
+                                  BatchStepScratch& scratch)
+{
+  const long int siteStride = static_cast<long int>(states) * obs.batchSize;
+  const unsigned numSegments = (window.decodeTo - window.decodeFrom + segmentLength - 1) / segmentLength;
+
+  initialAlphaBatched(obs, window.decodeFrom, buffers.checkpointAlpha.head(siteStride), scratch);
+
+  // Fill each segment but the last from its checkpoint. One more step from its last site gives the next checkpoint.
+  for (unsigned segment = 0u; segment + 1u < numSegments; ++segment) {
+    const unsigned segmentStart = window.decodeFrom + segment * segmentLength;
+    const unsigned segmentEnd = segmentStart + segmentLength;
+    recomputeSegmentAlpha(obs, segment, segmentStart, segmentEnd, buffers, scratch);
+    forwardStepBatched(segmentEnd, buffers.segmentAlpha.segment((segmentLength - 1) * siteStride, siteStride),
+                       buffers.checkpointAlpha.segment((segment + 1) * siteStride, siteStride), obs, scratch);
+  }
+}
+
+void HMM::recomputeSegmentAlpha(const BatchObservations& obs, const unsigned segment, const unsigned segmentStart,
+                                const unsigned segmentEnd, CheckpointedDecodeBuffers& buffers,
+                                BatchStepScratch& scratch)
+{
+  const long int siteStride = static_cast<long int>(states) * obs.batchSize;
+  buffers.segmentAlpha.head(siteStride) = buffers.checkpointAlpha.segment(segment * siteStride, siteStride);
+  for (long int pos = segmentStart + 1; pos < segmentEnd; ++pos) {
+    const long int siteInSegment = pos - segmentStart;
+    forwardStepBatched(pos, buffers.segmentAlpha.segment((siteInSegment - 1) * siteStride, siteStride),
+                       buffers.segmentAlpha.segment(siteInSegment * siteStride, siteStride), obs, scratch);
+  }
+}
+
+void HMM::summarisePosteriorAtSite(Eigen::Ref<Eigen::ArrayXf> alpha, const int batchSize, const std::size_t numPairs,
+                                   const long int offset, CheckpointedDecodeBuffers& buffers, BatchSummaries& summaries)
+{
+  // The kernel decodeBatch applies to all sites at once, here applied to one site, so the posterior is bit-identical
+  const long int siteStride = static_cast<long int>(states) * batchSize;
+  asmc::normalizeAlphaWithBeta(alpha, buffers.beta.head(siteStride), buffers.posteriorSums.head(batchSize), batchSize,
+                               states, 0, 1);
+
+  // The same loop order as writePerPairOutput, so the sums are bit-identical too
+  const auto numRealPairs = static_cast<int>(numPairs);
+  if (m_calculatePerPairPosteriorMean) {
+    for (int k = 0; k < states; k++) {
+      for (int pair = 0; pair < numRealPairs; pair++) {
+        summaries.posteriorMeans(pair, offset) += alpha[k * batchSize + pair] * expectedCoalTimes[k];
+      }
+    }
+  }
+  if (m_calculatePerPairMAP) {
+    buffers.mapValue.setZero();
+    for (int k = 0; k < states; k++) {
+      for (int pair = 0; pair < numRealPairs; pair++) {
+        const float posterior = alpha[k * batchSize + pair];
+        if (buffers.mapValue[pair] < posterior) {
+          summaries.maps(pair, offset) = k;
+          buffers.mapValue[pair] = posterior;
+        }
+      }
+    }
+  }
+}
+
+void HMM::storeBatchSummaries(const std::vector<PairBatch>& batches, const std::vector<BatchSummaries>& summaries)
+{
+  for (std::size_t batchIdx = 0; batchIdx < batches.size(); ++batchIdx) {
+    const PairBatch& batch = batches[batchIdx];
+    for (std::size_t pairInBatch = 0; pairInBatch < batch.numPairs; ++pairInBatch) {
+      const PairObservations& obs = batch.pairs[pairInBatch];
+      const auto outRow = static_cast<Eigen::Index>(batch.firstPair + pairInBatch);
+      const auto batchRow = static_cast<Eigen::Index>(pairInBatch);
+
+      m_decodePairsReturnStruct.perPairIndices.at(outRow) = std::make_tuple(
+          asmc::dipToHapId(obs.iInd, obs.iHap), asmc::indPlusHapToCombinedId(data.IIDList.at(obs.iInd), obs.iHap),
+          asmc::dipToHapId(obs.jInd, obs.jHap), asmc::indPlusHapToCombinedId(data.IIDList.at(obs.jInd), obs.jHap));
       if (m_storePerPairPosteriorMean) {
-        m_decodePairsReturnStruct.perPairPosteriorMeans.row(outIdx) = result.posteriorMeans.row(k);
+        m_decodePairsReturnStruct.perPairPosteriorMeans.row(outRow) = summaries[batchIdx].posteriorMeans.row(batchRow);
       }
       if (m_storePerPairMAP) {
-        m_decodePairsReturnStruct.perPairMAPs.row(outIdx) = result.maps.row(k);
+        m_decodePairsReturnStruct.perPairMAPs.row(outRow) = summaries[batchIdx].maps.row(batchRow);
       }
     }
   }
-#endif
 }
 
 void HMM::decodeFromHashing(const uint indivID1, const uint indivID2, const uint fromPosition, const uint toPosition)
@@ -1175,74 +964,121 @@ void HMM::decodeBatch(const vector<PairObservations>& obsBatch, const unsigned f
   ticksCombine += t3 - t2;
 }
 
-// Forward pass writing into caller-provided alpha buffer.
-// Thread-safe: only reads shared state (emission tables, decoding quantities).
-void HMM::forwardPassInto(Eigen::Ref<Eigen::ArrayXf> alphaBuffer, Eigen::Ref<Eigen::ArrayXf> scalingBuffer,
-                          Eigen::Ref<Eigen::ArrayXf> allZeros,
-                          Eigen::Ref<Eigen::ArrayXf> obsIsZero, Eigen::Ref<Eigen::ArrayXf> obsIsTwo,
-                          int curBatchSize, const unsigned from, const unsigned to)
+HMM::BatchStepScratch::BatchStepScratch(const int numStates, const int batchSize)
+    : alphaC(numStates * batchSize), AU(batchSize), vec(numStates * batchSize), BU(numStates * batchSize),
+      BL(batchSize), sums(batchSize), scaling(batchSize), betweenSteps(numStates * batchSize)
 {
-  assert(curBatchSize % asmc::getNumSimdLanes() == 0);
-
-  Eigen::ArrayXf alphaC(states * curBatchSize);
-  Eigen::ArrayXf AU(curBatchSize);
-  Eigen::ArrayXf sums(curBatchSize);
-  // Sequence mode takes two steps per site; this holds alpha between them, so the stored alpha of the previous site
-  // is not overwritten.
-  Eigen::ArrayXf alphaBetweenSteps(states * curBatchSize);
-
-  // Initialize alpha at from
-  for (int k = 0; k < states; k++) {
-    for (int v = 0; v < curBatchSize; v++) {
-      float firstEmission = emission1AtSite[from][k] +
-                            emission0minus1AtSite[from][k] * obsIsZero[from * curBatchSize + v] +
-                            emission2minus0AtSite[from][k] * obsIsTwo[from * curBatchSize + v];
-      alphaBuffer[(states * from + k) * curBatchSize + v] = m_decodingQuant.initialStateProb[k] * firstEmission;
-    }
-  }
-
-  Eigen::Map<Eigen::ArrayXf> currentAlpha(&alphaBuffer[states * from * curBatchSize], states * curBatchSize);
-  asmc::calculateScalingBatch(currentAlpha, scalingBuffer, sums, curBatchSize, states);
-  asmc::applyScalingBatch(currentAlpha, scalingBuffer, curBatchSize, states);
-
-  // Forward induction
-  float lastGeneticPos = data.geneticPositions[from];
-  int lastPhysicalPos = data.physicalPositions[from];
-
-  for (long int pos = from + 1; pos < to; pos++) {
-    float recDist = asmc::roundMorgans(data.geneticPositions[pos] - lastGeneticPos, precision, minGenetic);
-    Eigen::Map<Eigen::ArrayXf> prevAlpha(&alphaBuffer[(pos - 1) * states * curBatchSize], states * curBatchSize);
-    Eigen::Map<Eigen::ArrayXf> nextAlpha(&alphaBuffer[pos * states * curBatchSize], states * curBatchSize);
-
-    if (decodingParams.decodingSequence) {
-      float currentRecRate = asmc::roundMorgans(data.recRateAtMarker[pos], precision, minGenetic);
-      int physDist = asmc::roundPhysical(data.physicalPositions[pos] - lastPhysicalPos - 1, precision);
-      float recDistM1 = asmc::roundMorgans(recDist - currentRecRate, precision, minGenetic);
-      auto homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDist);
-      getNextAlphaBatched(recDistM1, alphaC, curBatchSize, prevAlpha, pos, allZeros, allZeros,
-                          AU, alphaBetweenSteps, homozEmission, homozEmission, homozEmission);
-      getNextAlphaBatched(currentRecRate, alphaC, curBatchSize, alphaBetweenSteps, pos, obsIsZero, obsIsTwo, AU,
-                          nextAlpha, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
-    } else {
-      getNextAlphaBatched(recDist, alphaC, curBatchSize, prevAlpha, pos, obsIsZero, obsIsTwo,
-                          AU, nextAlpha, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
-    }
-
-    if (pos % scalingSkip == 0) {
-      asmc::calculateScalingBatch(nextAlpha, scalingBuffer, sums, curBatchSize, states);
-      asmc::applyScalingBatch(nextAlpha, scalingBuffer, curBatchSize, states);
-    }
-    lastGeneticPos = data.geneticPositions[pos];
-    lastPhysicalPos = data.physicalPositions[pos];
-  }
-
 }
 
-// Sequential forward: delegates to forwardPassInto with class-level buffers
+void HMM::initialAlphaBatched(const BatchObservations& obs, const unsigned from, Eigen::Ref<Eigen::ArrayXf> alpha,
+                              BatchStepScratch& scratch)
+{
+  const int batchSize = obs.batchSize;
+  for (int k = 0; k < states; k++) {
+    for (int v = 0; v < batchSize; v++) {
+      const float firstEmission = emission1AtSite[from][k] +
+                                  emission0minus1AtSite[from][k] * obs.isZero[from * batchSize + v] +
+                                  emission2minus0AtSite[from][k] * obs.isTwo[from * batchSize + v];
+      alpha[k * batchSize + v] = m_decodingQuant.initialStateProb[k] * firstEmission;
+    }
+  }
+  asmc::calculateScalingBatch(alpha, scratch.scaling, scratch.sums, batchSize, states);
+  asmc::applyScalingBatch(alpha, scratch.scaling, batchSize, states);
+}
+
+void HMM::forwardStepBatched(const long int pos, Eigen::Ref<Eigen::ArrayXf> previousAlpha,
+                             Eigen::Ref<Eigen::ArrayXf> nextAlpha, const BatchObservations& obs,
+                             BatchStepScratch& scratch)
+{
+  const int batchSize = obs.batchSize;
+  const float recDist =
+      asmc::roundMorgans(data.geneticPositions[pos] - data.geneticPositions[pos - 1], precision, minGenetic);
+
+  if (decodingParams.decodingSequence) {
+    // First across the homozygous gap before the marker, then the marker itself. The intermediate result goes into
+    // scratch.betweenSteps so that previousAlpha, which may be stored, is not overwritten.
+    const float markerRecRate = asmc::roundMorgans(data.recRateAtMarker[pos], precision, minGenetic);
+    const int gapLength =
+        asmc::roundPhysical(data.physicalPositions[pos] - data.physicalPositions[pos - 1] - 1, precision);
+    const float gapRecDist = asmc::roundMorgans(recDist - markerRecRate, precision, minGenetic);
+    const vector<float>& homozEmission = m_decodingQuant.homozygousEmissionMap.at(gapLength);
+    getNextAlphaBatched(gapRecDist, scratch.alphaC, batchSize, previousAlpha, pos, obs.allZeros, obs.allZeros,
+                        scratch.AU, scratch.betweenSteps, homozEmission, homozEmission, homozEmission);
+    getNextAlphaBatched(markerRecRate, scratch.alphaC, batchSize, scratch.betweenSteps, pos, obs.isZero, obs.isTwo,
+                        scratch.AU, nextAlpha, emission1AtSite[pos], emission0minus1AtSite[pos],
+                        emission2minus0AtSite[pos]);
+  } else {
+    getNextAlphaBatched(recDist, scratch.alphaC, batchSize, previousAlpha, pos, obs.isZero, obs.isTwo, scratch.AU,
+                        nextAlpha, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
+  }
+
+  if (pos % scalingSkip == 0) {
+    asmc::calculateScalingBatch(nextAlpha, scratch.scaling, scratch.sums, batchSize, states);
+    asmc::applyScalingBatch(nextAlpha, scratch.scaling, batchSize, states);
+  }
+}
+
+void HMM::initialBetaBatched(Eigen::Ref<Eigen::ArrayXf> beta, BatchStepScratch& scratch)
+{
+  const auto batchSize = static_cast<int>(scratch.scaling.size());
+  beta.setOnes();
+  asmc::calculateScalingBatch(beta, scratch.scaling, scratch.sums, batchSize, states);
+  asmc::applyScalingBatch(beta, scratch.scaling, batchSize, states);
+}
+
+void HMM::backwardStepBatched(const long int pos, Eigen::Ref<Eigen::ArrayXf> nextBeta, Eigen::Ref<Eigen::ArrayXf> beta,
+                              const BatchObservations& obs, BatchStepScratch& scratch)
+{
+  const int batchSize = obs.batchSize;
+  const float recDist =
+      asmc::roundMorgans(data.geneticPositions[pos + 1] - data.geneticPositions[pos], precision, minGenetic);
+
+  if (decodingParams.decodingSequence) {
+    // Undo forwardStepBatched's two steps from pos to pos + 1 in reverse order: first the marker at pos + 1, then the
+    // homozygous gap before it. The intermediate result goes into scratch.betweenSteps so that nextBeta, which may be
+    // stored, is not overwritten.
+    const float nextMarkerRecRate = asmc::roundMorgans(data.recRateAtMarker[pos + 1], precision, minGenetic);
+    const int gapLength =
+        asmc::roundPhysical(data.physicalPositions[pos + 1] - data.physicalPositions[pos] - 1, precision);
+    const float gapRecDist = asmc::roundMorgans(recDist - nextMarkerRecRate, precision, minGenetic);
+    const vector<float>& homozEmission = m_decodingQuant.homozygousEmissionMap.at(gapLength);
+    getPreviousBetaBatched(nextMarkerRecRate, batchSize, nextBeta, static_cast<int>(pos), obs.isZero, obs.isTwo,
+                           scratch.vec, scratch.BU, scratch.BL, scratch.betweenSteps, emission1AtSite[pos + 1],
+                           emission0minus1AtSite[pos + 1], emission2minus0AtSite[pos + 1]);
+    getPreviousBetaBatched(gapRecDist, batchSize, scratch.betweenSteps, static_cast<int>(pos), obs.allZeros,
+                           obs.allZeros, scratch.vec, scratch.BU, scratch.BL, beta, homozEmission, homozEmission,
+                           homozEmission);
+  } else {
+    getPreviousBetaBatched(recDist, batchSize, nextBeta, static_cast<int>(pos), obs.isZero, obs.isTwo, scratch.vec,
+                           scratch.BU, scratch.BL, beta, emission1AtSite[pos + 1], emission0minus1AtSite[pos + 1],
+                           emission2minus0AtSite[pos + 1]);
+  }
+
+  if (pos % scalingSkip == 0) {
+    asmc::calculateScalingBatch(beta, scratch.scaling, scratch.sums, batchSize, states);
+    asmc::applyScalingBatch(beta, scratch.scaling, batchSize, states);
+  }
+}
+
+void HMM::forwardPassInto(Eigen::Ref<Eigen::ArrayXf> alphaBuffer, const BatchObservations& obs, const unsigned from,
+                          const unsigned to)
+{
+  assert(obs.batchSize % asmc::getNumSimdLanes() == 0);
+  const long int siteStride = static_cast<long int>(states) * obs.batchSize;
+  BatchStepScratch scratch(states, obs.batchSize);
+
+  initialAlphaBatched(obs, from, alphaBuffer.segment(from * siteStride, siteStride), scratch);
+  for (long int pos = from + 1; pos < to; pos++) {
+    forwardStepBatched(pos, alphaBuffer.segment((pos - 1) * siteStride, siteStride),
+                       alphaBuffer.segment(pos * siteStride, siteStride), obs, scratch);
+  }
+}
+
 void HMM::forwardBatch(Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch, Eigen::Ref<Eigen::ArrayXf> obsIsTwoBatch,
                        int curBatchSize, const unsigned from, const unsigned to)
 {
-  forwardPassInto(m_alphaBuffer, m_scalingBuffer, m_allZeros, obsIsZeroBatch, obsIsTwoBatch, curBatchSize, from, to);
+  const BatchObservations obs{obsIsZeroBatch, obsIsTwoBatch, m_allZeros, curBatchSize};
+  forwardPassInto(m_alphaBuffer, obs, from, to);
 }
 
 // compute next alpha vector in linear time
@@ -1270,74 +1106,24 @@ void HMM::getNextAlphaBatched(float recDistFromPrevious, Eigen::Ref<Eigen::Array
                              obsIsTwoBatch, curBatchSize, states, pos);
 }
 
-// backward step
-// Backward pass writing into caller-provided beta buffer.
-// Thread-safe: only reads shared state (emission tables, decoding quantities).
-void HMM::backwardPassInto(Eigen::Ref<Eigen::ArrayXf> betaBuffer, Eigen::Ref<Eigen::ArrayXf> scalingBuffer,
-                           Eigen::Ref<Eigen::ArrayXf> allZeros,
-                           Eigen::Ref<Eigen::ArrayXf> obsIsZero, Eigen::Ref<Eigen::ArrayXf> obsIsTwo,
-                           int curBatchSize, const unsigned from, const unsigned to)
+void HMM::backwardPassInto(Eigen::Ref<Eigen::ArrayXf> betaBuffer, const BatchObservations& obs, const unsigned from,
+                           const unsigned to)
 {
-  // Initialize beta at to-1
-  for (int k = 0; k < states; k++) {
-    for (int v = 0; v < curBatchSize; v++) {
-      betaBuffer[((to - 1) * states + k) * curBatchSize + v] = 1.0f;
-    }
+  const long int siteStride = static_cast<long int>(states) * obs.batchSize;
+  BatchStepScratch scratch(states, obs.batchSize);
+
+  initialBetaBatched(betaBuffer.segment((to - 1) * siteStride, siteStride), scratch);
+  for (long int pos = static_cast<long int>(to) - 2; pos >= static_cast<long int>(from); pos--) {
+    backwardStepBatched(pos, betaBuffer.segment((pos + 1) * siteStride, siteStride),
+                        betaBuffer.segment(pos * siteStride, siteStride), obs, scratch);
   }
-
-  Eigen::ArrayXf sums(curBatchSize);
-  Eigen::Map<Eigen::ArrayXf> currentBeta(&betaBuffer[states * (to - 1) * curBatchSize], states * curBatchSize);
-  asmc::calculateScalingBatch(currentBeta, scalingBuffer, sums, curBatchSize, states);
-  asmc::applyScalingBatch(currentBeta, scalingBuffer, curBatchSize, states);
-
-  // Backward induction
-  Eigen::ArrayXf BL(curBatchSize);
-  Eigen::ArrayXf BU(states * curBatchSize);
-  Eigen::ArrayXf vec(states * curBatchSize);
-  // Sequence mode takes two steps per site; this holds beta between them, so the stored beta of the next site is not
-  // overwritten.
-  Eigen::ArrayXf betaBetweenSteps(states * curBatchSize);
-
-  float lastGeneticPos = data.geneticPositions[to - 1];
-  int lastPhysicalPos = data.physicalPositions[to - 1];
-
-  for (long int pos = to - 2; pos >= static_cast<long int>(from); pos--) {
-    float recDist = asmc::roundMorgans(lastGeneticPos - data.geneticPositions[pos], precision, minGenetic);
-    Eigen::Map<Eigen::ArrayXf> prevBeta(&betaBuffer[pos * states * curBatchSize], states * curBatchSize);
-    Eigen::Map<Eigen::ArrayXf> lastBeta(&betaBuffer[(pos + 1) * states * curBatchSize], states * curBatchSize);
-
-    if (decodingParams.decodingSequence) {
-      // Undo forwardPassInto's two steps from pos to pos + 1 in reverse order: first the marker at pos + 1, then the
-      // homozygous gap before it.
-      float nextMarkerRecRate = asmc::roundMorgans(data.recRateAtMarker[pos + 1], precision, minGenetic);
-      int physDist = asmc::roundPhysical(lastPhysicalPos - data.physicalPositions[pos] - 1, precision);
-      float recDistM1 = asmc::roundMorgans(recDist - nextMarkerRecRate, precision, minGenetic);
-      auto homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDist);
-      getPreviousBetaBatched(nextMarkerRecRate, curBatchSize, lastBeta, pos, obsIsZero, obsIsTwo, vec,
-                             BU, BL, betaBetweenSteps, emission1AtSite[pos + 1],
-                             emission0minus1AtSite[pos + 1], emission2minus0AtSite[pos + 1]);
-      getPreviousBetaBatched(recDistM1, curBatchSize, betaBetweenSteps, pos, allZeros, allZeros,
-                             vec, BU, BL, prevBeta, homozEmission, homozEmission, homozEmission);
-    } else {
-      getPreviousBetaBatched(recDist, curBatchSize, lastBeta, pos, obsIsZero, obsIsTwo,
-                             vec, BU, BL, prevBeta, emission1AtSite[pos + 1],
-                             emission0minus1AtSite[pos + 1], emission2minus0AtSite[pos + 1]);
-    }
-    if (pos % scalingSkip == 0) {
-      asmc::calculateScalingBatch(prevBeta, scalingBuffer, sums, curBatchSize, states);
-      asmc::applyScalingBatch(prevBeta, scalingBuffer, curBatchSize, states);
-    }
-    lastGeneticPos = data.geneticPositions[pos];
-    lastPhysicalPos = data.physicalPositions[pos];
-  }
-
 }
 
-// Sequential backward: delegates to backwardPassInto with class-level buffers
 void HMM::backwardBatch(Eigen::ArrayXf obsIsZeroBatch, Eigen::ArrayXf obsIsTwoBatch, int curBatchSize,
                         const unsigned from, const unsigned to)
 {
-  backwardPassInto(m_betaBuffer, m_scalingBuffer, m_allZeros, obsIsZeroBatch, obsIsTwoBatch, curBatchSize, from, to);
+  const BatchObservations obs{obsIsZeroBatch, obsIsTwoBatch, m_allZeros, curBatchSize};
+  backwardPassInto(m_betaBuffer, obs, from, to);
 }
 
 // compute previous beta vector in linear time

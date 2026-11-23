@@ -267,6 +267,33 @@ inline DecodePairsReturnStruct decodeBatched(HMM& hmm, const std::vector<unsigne
 }
 
 /**
+ * Decode haplotype pairs with the checkpointed path (HMM::decodeHapPairsParallel) and return the results.
+ *
+ * Stores, for each pair, the posterior mean and the MAP over the window [from, to); this path does not produce full
+ * posteriors. Burn-in sites are decoded but not stored.
+ *
+ * @param hmm the HMM to decode with; its per-pair storage options are set to what this path supports
+ * @param numThreads the number of OpenMP threads to decode with
+ * Other parameters as for decodeBatched.
+ */
+inline DecodePairsReturnStruct decodeCheckpointed(HMM& hmm, const std::vector<unsigned long>& hapsA,
+                                                  const std::vector<unsigned long>& hapsB, unsigned from, unsigned to,
+                                                  float cmBurnIn, int numThreads)
+{
+  hmm.setStorePerPairPosterior(false);
+  hmm.setStorePerPairPosteriorMean(true);
+  hmm.setStorePerPairMap(true);
+
+  const auto windowLength = static_cast<long int>(to - from);
+  const auto numStates = static_cast<long int>(hmm.getDecodingQuantities().states);
+  hmm.getDecodePairsReturnStruct().initialise(hapsA, hapsB, windowLength, numStates, /*_fullPosteriors=*/false,
+                                              /*_sumOfPosteriors=*/false, /*_perPairPosteriors=*/true,
+                                              /*_perPairMAPs=*/true);
+  hmm.decodeHapPairsParallel(hapsA, hapsB, from, to, cmBurnIn, numThreads);
+  return hmm.getDecodePairsReturnStruct();
+}
+
+/**
  * Decode one haplotype pair with the non-batched, scalar path (HMM::decode) over sites [from, to), with no burn-in.
  *
  * This path runs the same recursions as the batched path, with plain loops instead of SIMD kernels, so it serves as

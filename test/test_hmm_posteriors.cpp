@@ -43,6 +43,7 @@ namespace
 {
 
 using asmc::test::decodeBatched;
+using asmc::test::decodeCheckpointed;
 using asmc::test::decodeReference;
 using asmc::test::maxAbsPosteriorDifference;
 using asmc::test::ReferencePosterior;
@@ -141,6 +142,47 @@ void checkWindowMatchesReference(HMM& hmm, const Data& data, const unsigned from
     REQUIRE(batched.perPairPosteriors.at(pair).cols() == static_cast<Eigen::Index>(to - from));
     CHECK(maxAbsPosteriorDifference(batched.perPairPosteriors.at(pair), references.at(pair), from) <
           posteriorTolerance);
+  }
+}
+
+/**
+ * Check the checkpointed path's posterior means and MAPs over [from, to) against values recomputed from reference
+ * posteriors decoded over the same sites plus burn-in. A MAP state is accepted if its reference posterior is within
+ * posteriorTolerance of the largest, so that near-ties rounded differently by the two paths do not fail.
+ */
+void checkCheckpointedWindowMatchesReference(HMM& hmm, const Data& data, const unsigned from, const unsigned to)
+{
+  const unsigned decodedFrom = asmc::getFromPosition(data.geneticPositions, from, cmBurnIn);
+  const unsigned decodedTo = asmc::getToPosition(data.geneticPositions, to, cmBurnIn);
+  const std::vector<ReferencePosterior> references = decodeReferencePairs(hmm, decodedFrom, decodedTo);
+  const std::vector<float>& expectedTimes = hmm.getDecodingQuantities().expectedTimes;
+  const DecodePairsReturnStruct checkpointed =
+      decodeCheckpointed(hmm, pairHapsA(), pairHapsB(), from, to, cmBurnIn, /*numThreads=*/2);
+
+  for (auto pair = 0ul; pair < references.size(); ++pair) {
+    INFO("window [" << from << ", " << to << "), pair " << pair);
+    const ReferencePosterior& reference = references.at(pair);
+    const auto row = static_cast<Eigen::Index>(pair);
+    REQUIRE(checkpointed.perPairPosteriorMeans.cols() == static_cast<Eigen::Index>(to - from));
+
+    float maxMeanError = 0.f;
+    long mapMismatches = 0;
+    for (auto site = from; site < to; ++site) {
+      const Eigen::Index offset = site - from;
+      float mean = 0.f;
+      float largestPosterior = 0.f;
+      for (auto state = 0ul; state < reference.size(); ++state) {
+        mean += reference.at(state).at(site) * expectedTimes.at(state);
+        largestPosterior = std::max(largestPosterior, reference.at(state).at(site));
+      }
+      maxMeanError = std::max(maxMeanError, std::abs(checkpointed.perPairPosteriorMeans(row, offset) - mean) / mean);
+      const auto mapState = static_cast<std::size_t>(checkpointed.perPairMAPs(row, offset));
+      if (reference.at(mapState).at(site) < largestPosterior - posteriorTolerance) {
+        ++mapMismatches;
+      }
+    }
+    CHECK(maxMeanError < 1e-5f);
+    CHECK(mapMismatches == 0);
   }
 }
 
@@ -394,4 +436,26 @@ TEST_CASE("HMM::decodeSummarize agrees with HMM::decode", "[HMM]")
       compareSummaryWithPosterior(hmm.decodeSummarize(observations), hmm.decode(observations), expectedTimes);
   CHECK(errors.mapMismatches == 0);
   CHECK(errors.maxMeanError < 1e-5f);
+}
+
+TEST_CASE("checkpointed posterior means and MAPs match HMM::decode", "[HMM][checkpointed]")
+{
+  // The array data's 6,760 sites make 27 checkpointed segments of 256 sites
+  SECTION("array mode")
+  {
+    const DecodingParams params = arrayParams();
+    const Data data(params);
+    HMM hmm(data, params);
+    const auto numSites = static_cast<unsigned>(data.sites);
+    checkCheckpointedWindowMatchesReference(hmm, data, 0u, numSites);
+    checkCheckpointedWindowMatchesReference(hmm, data, 1000u, 3000u);
+    checkCheckpointedWindowMatchesReference(hmm, data, numSites - 1u, numSites);
+  }
+  SECTION("sequence mode")
+  {
+    const DecodingParams params = sequenceParams();
+    const Data data(params);
+    HMM hmm(data, params);
+    checkCheckpointedWindowMatchesReference(hmm, data, 5000u, 7000u);
+  }
 }
