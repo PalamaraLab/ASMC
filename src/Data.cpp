@@ -16,10 +16,12 @@
 #include <algorithm>
 #include <cctype>
 #include <charconv>
+#include <cstddef>
 #include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <map>
 #include <random>
 #include <sstream>
@@ -113,70 +115,28 @@ Data::Data(int numSites, unsigned long numDiploidSamples,
            bool usingCSFS, bool foldData_)
 {
   sites = numSites;
-  sampleSize = numDiploidSamples;
-  haploidSampleSize = 2 * numDiploidSamples;
   decodingUsesCSFS = usingCSFS;
   foldToMinorAlleles = foldData_;
   mJobbing = false;
 
   physicalPositions = std::move(physPos);
   geneticPositions = std::move(genPos);
+  computeRecombinationRates();
 
-  siteWasFlippedDuringFolding = std::vector<bool>(sites, false);
-
-  // Dummy sample names
-  for (unsigned long i = 0; i < numDiploidSamples; i++) {
-    auto name = fmt::format("sample_{}", i);
-    FamIDList.push_back(name);
-    IIDList.push_back(name);
-    famAndIndNameList.push_back(name + "\t" + name);
-  }
-
-  // Create individuals
-  for (unsigned long i = 0; i < numDiploidSamples; i++) {
-    individuals.emplace_back(sites);
-  }
-
-  // Populate genotypes from flat array [site * numHaps + hap]
-  const unsigned long numHaps = haploidSampleSize;
-  totalSamplesCount = vector<int>(sites, static_cast<int>(numHaps));
+  // Count the 1s at each site, folding to the minor allele if requested. haplotypes is laid out [site * numHaps + hap].
+  const auto numHaps = static_cast<int>(2ul * numDiploidSamples);
+  totalSamplesCount = vector<int>(sites, numHaps);
   derivedAlleleCounts = vector<int>(sites, 0);
-
-  for (int s = 0; s < sites; s++) {
-    int DAcount = 0;
-    for (unsigned long h = 0; h < numHaps; h++) {
-      if (haplotypes[static_cast<size_t>(s) * numHaps + h] == 1) {
-        DAcount++;
-      }
-    }
-
-    bool minorAlleleValue = foldToMinorAlleles
-        ? (DAcount <= static_cast<int>(numHaps) - DAcount)
-        : true;
-    siteWasFlippedDuringFolding[s] = !minorAlleleValue;
-
-    for (unsigned long h = 0; h < numHaps; h++) {
-      unsigned long indIdx = h / 2;
-      int hap = static_cast<int>(h % 2) + 1;
-      bool isOne = (haplotypes[static_cast<size_t>(s) * numHaps + h] == 1);
-      individuals[indIdx].setGenotype(hap, s, isOne ? minorAlleleValue : !minorAlleleValue);
-    }
-
-    derivedAlleleCounts[s] = foldToMinorAlleles
-        ? std::min(DAcount, static_cast<int>(numHaps) - DAcount)
-        : DAcount;
+  siteWasFlippedDuringFolding = vector<bool>(sites, false);
+  for (int site = 0; site < sites; site++) {
+    const int8_t* siteHaplotypes = haplotypes + static_cast<std::size_t>(site) * numHaps;
+    const auto count = static_cast<int>(std::count(siteHaplotypes, siteHaplotypes + numHaps, int8_t{1}));
+    const bool flip = foldToMinorAlleles && count > numHaps - count;
+    siteWasFlippedDuringFolding[site] = flip;
+    derivedAlleleCounts[site] = flip ? numHaps - count : count;
   }
 
-  // Compute recombination rates
-  recRateAtMarker = std::vector<float>(sites, 0.f);
-  for (int i = 1; i < sites; i++) {
-    float genDist = geneticPositions[i] - geneticPositions[i - 1];
-    float physDist = static_cast<float>(physicalPositions[i] - physicalPositions[i - 1]);
-    recRateAtMarker[i] = (physDist > 0) ? genDist / physDist : 0.f;
-  }
-  if (sites > 1) {
-    recRateAtMarker[0] = recRateAtMarker[1];
-  }
+  setGenotypes(haplotypes, numHaps);
 }
 
 // Construct from precomputed allele counts only (no genotypes).
@@ -198,16 +158,7 @@ Data::Data(std::vector<int> derivedCounts, std::vector<int> totalCounts,
   derivedAlleleCounts = std::move(derivedCounts);
   totalSamplesCount = std::move(totalCounts);
   siteWasFlippedDuringFolding = std::vector<bool>(sites, false);
-
-  recRateAtMarker = std::vector<float>(sites, 0.f);
-  for (int i = 1; i < sites; i++) {
-    float genDist = geneticPositions[i] - geneticPositions[i - 1];
-    float physDist = static_cast<float>(physicalPositions[i] - physicalPositions[i - 1]);
-    recRateAtMarker[i] = (physDist > 0) ? genDist / physDist : 0.f;
-  }
-  if (sites > 1) {
-    recRateAtMarker[0] = recRateAtMarker[1];
-  }
+  computeRecombinationRates();
 }
 
 // Load a subset of haplotypes for pair decoding. Called between decode batches.
@@ -216,19 +167,24 @@ Data::Data(std::vector<int> derivedCounts, std::vector<int> totalCounts,
 // Does NOT recompute emissions — allele counts are already set from the constructor.
 void Data::loadSubsetGenotypes(const int8_t* haplotypes, int numSubsetHaps)
 {
-  unsigned long numDiploid = static_cast<unsigned long>(numSubsetHaps / 2);
-  sampleSize = numDiploid;
-  haploidSampleSize = static_cast<unsigned long>(numSubsetHaps);
+  setGenotypes(haplotypes, numSubsetHaps);
+}
 
-  // Dummy sample names — needed by writePerPairOutput which indexes into IIDList
-  FamIDList.resize(numDiploid);
-  IIDList.resize(numDiploid);
-  famAndIndNameList.resize(numDiploid);
+void Data::setGenotypes(const int8_t* haplotypes, const int numHaps)
+{
+  const auto numDiploid = static_cast<unsigned long>(numHaps / 2);
+  sampleSize = numDiploid;
+  haploidSampleSize = static_cast<unsigned long>(numHaps);
+
+  // Placeholder sample names: decoding pairs looks them up in IIDList
+  FamIDList.clear();
+  IIDList.clear();
+  famAndIndNameList.clear();
   for (unsigned long i = 0; i < numDiploid; i++) {
-    auto name = fmt::format("sample_{}", i);
-    FamIDList[i] = name;
-    IIDList[i] = name;
-    famAndIndNameList[i] = name + "\t" + name;
+    const std::string name = fmt::format("sample_{}", i);
+    FamIDList.push_back(name);
+    IIDList.push_back(name);
+    famAndIndNameList.push_back(name + "\t" + name);
   }
 
   individuals.clear();
@@ -237,12 +193,33 @@ void Data::loadSubsetGenotypes(const int8_t* haplotypes, int numSubsetHaps)
     individuals.emplace_back(sites);
   }
 
-  for (int s = 0; s < sites; s++) {
-    for (int h = 0; h < numSubsetHaps; h++) {
-      individuals[h / 2].setGenotype(
-          (h % 2) + 1, s,
-          haplotypes[static_cast<size_t>(s) * numSubsetHaps + h] == 1);
+  // A 1 is the derived allele, so at a site flipped during folding it is the major allele
+  for (int site = 0; site < sites; site++) {
+    for (int hap = 0; hap < numHaps; hap++) {
+      const bool isOne = haplotypes[static_cast<std::size_t>(site) * numHaps + hap] == 1;
+      individuals[hap / 2].setGenotype((hap % 2) + 1, site, isOne != siteWasFlippedDuringFolding[site]);
     }
+  }
+}
+
+void Data::computeRecombinationRates()
+{
+  // Consecutive sites can have identical physical and genetic positions. In this case the recombination rate is zero.
+  recRateAtMarker = std::vector<float>(sites, 0.f);
+  for (auto i = 1; i < sites; ++i) {
+    const float genDistFromPrevious = geneticPositions[i] - geneticPositions[i - 1];
+    const float physDistFromPrevious = static_cast<float>(physicalPositions[i] - physicalPositions[i - 1]);
+
+    if (genDistFromPrevious < std::numeric_limits<float>::epsilon()) {
+      recRateAtMarker.at(i) = 0.f;
+    } else {
+      recRateAtMarker.at(i) = genDistFromPrevious / physDistFromPrevious;
+    }
+  }
+
+  // Re-use the first rec rate in place zero
+  if (sites > 1) {
+    recRateAtMarker.at(0) = recRateAtMarker.at(1);
   }
 }
 
@@ -307,28 +284,13 @@ void Data::readMap(const std::string& inFileRoot, const std::string& mapFile)
   SNP_IDs = map.getSnpIds();
   geneticPositions.reserve(sites);
   physicalPositions.reserve(sites);
-  recRateAtMarker = std::vector<float>(sites);
 
   for (auto i = 0ul; i < map.getNumSites(); ++i) {
     geneticPositions.emplace_back(static_cast<float>(map.getGeneticPositions().at(i)) / 100.f);
     physicalPositions.emplace_back(static_cast<int>(map.getPhysicalPositions().at(i)));
   }
 
-  // When calculating the recombination rates, note that it is possible to have consecutive entries in the map with
-  // identical physical & genetic positions. In this case we set the recombination rate to zero.
-  for (auto i = 1ul; i < map.getNumSites(); ++i) {
-    const float genDistFromPrevious = geneticPositions[i] - geneticPositions[i - 1];
-    const float physDistFromPrevious = static_cast<float>(physicalPositions[i] - physicalPositions[i - 1]);
-
-    if(genDistFromPrevious < std::numeric_limits<float>::epsilon()) {
-      recRateAtMarker.at(i) = 0.f;
-    } else {
-      recRateAtMarker.at(i) = genDistFromPrevious / physDistFromPrevious;
-    }
-  }
-
-  // Re-use the first rec rate in place zero
-  recRateAtMarker.at(0) = recRateAtMarker.at(1);
+  computeRecombinationRates();
 }
 
 void Data::readSamplesList(const string& inFileRoot)
