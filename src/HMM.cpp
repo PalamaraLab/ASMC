@@ -712,6 +712,9 @@ void HMM::forwardBatch(Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch, Eigen::Ref<Eig
   Eigen::ArrayXf alphaC(states * curBatchSize);
   Eigen::ArrayXf AU(curBatchSize);
   Eigen::ArrayXf sums(curBatchSize);
+  // Sequence mode takes two steps per site; this holds alpha between them, so the stored alpha of the previous site
+  // is not overwritten.
+  Eigen::ArrayXf alphaBetweenSteps(states * curBatchSize);
 
   // fill pos=0 in alpha
   for (int k = 0; k < states; k++) {
@@ -745,10 +748,9 @@ void HMM::forwardBatch(Eigen::Ref<Eigen::ArrayXf> obsIsZeroBatch, Eigen::Ref<Eig
           asmc::roundMorgans(recDistFromPrevious - currentRecRate, precision, minGenetic);
       vector<float> homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDistFromPreviousMinusOne);
       getNextAlphaBatched(recDistFromPreviousMinusOne, alphaC, curBatchSize, previousAlpha, pos, m_allZeros, m_allZeros,
-                          AU, nextAlpha, homozEmission, homozEmission, homozEmission);
-      previousAlpha = nextAlpha;
-      getNextAlphaBatched(currentRecRate, alphaC, curBatchSize, previousAlpha, pos, obsIsZeroBatch, obsIsTwoBatch, AU,
-                          nextAlpha, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
+                          AU, alphaBetweenSteps, homozEmission, homozEmission, homozEmission);
+      getNextAlphaBatched(currentRecRate, alphaC, curBatchSize, alphaBetweenSteps, pos, obsIsZeroBatch, obsIsTwoBatch,
+                          AU, nextAlpha, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
     } else {
       getNextAlphaBatched(recDistFromPrevious, alphaC, curBatchSize, previousAlpha, pos, obsIsZeroBatch, obsIsTwoBatch,
                           AU, nextAlpha, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
@@ -811,6 +813,9 @@ void HMM::backwardBatch(Eigen::ArrayXf obsIsZeroBatch, Eigen::ArrayXf obsIsTwoBa
   Eigen::ArrayXf BL(curBatchSize);
   Eigen::ArrayXf BU(states * curBatchSize);
   Eigen::ArrayXf vec(states * curBatchSize);
+  // Sequence mode takes two steps per site; this holds beta between them, so the stored beta of the next site is not
+  // overwritten.
+  Eigen::ArrayXf betaBetweenSteps(states * curBatchSize);
 
   float lastGeneticPos = data.geneticPositions[to - 1];
   int lastPhysicalPos = data.physicalPositions[to - 1];
@@ -829,9 +834,8 @@ void HMM::backwardBatch(Eigen::ArrayXf obsIsZeroBatch, Eigen::ArrayXf obsIsTwoBa
       float recDistFromPreviousMinusOne = asmc::roundMorgans(recDistFromPrevious - currentRecRate, precision, minGenetic);
       vector<float> homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDistFromPreviousMinusOne);
       getPreviousBetaBatched(recDistFromPreviousMinusOne, curBatchSize, lastComputedBeta, pos, m_allZeros, m_allZeros,
-                             vec, BU, BL, previousBeta, homozEmission, homozEmission, homozEmission);
-      lastComputedBeta = previousBeta;
-      getPreviousBetaBatched(currentRecRate, curBatchSize, lastComputedBeta, pos, obsIsZeroBatch, obsIsTwoBatch, vec,
+                             vec, BU, BL, betaBetweenSteps, homozEmission, homozEmission, homozEmission);
+      getPreviousBetaBatched(currentRecRate, curBatchSize, betaBetweenSteps, pos, obsIsZeroBatch, obsIsTwoBatch, vec,
                              BU, BL, previousBeta, emission1AtSite[pos + 1], emission0minus1AtSite[pos + 1],
                              emission2minus0AtSite[pos + 1]);
     } else {

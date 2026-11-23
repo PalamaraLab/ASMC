@@ -286,12 +286,10 @@ TEST_CASE("windows at the ends of the chromosome match HMM::decode", "[HMM]")
   }
 }
 
-// Known bug: in sequence mode, HMM::forwardBatch and HMM::backwardBatch take two steps per site and assign the
-// intermediate result with `previousAlpha = nextAlpha` and `lastComputedBeta = previousBeta`. These are Eigen::Maps
-// into the alpha and beta buffers, so the assignment copies the intermediate values over the stored alpha of the
-// previous site and the stored beta of the next site, which then enter that site's posterior. Batched posteriors
-// differ from HMM::decode by up to about 0.5 as a result. Remove [!shouldfail] once that is fixed.
-TEST_CASE("sequence-mode posteriors match HMM::decode", "[HMM][!shouldfail]")
+// In sequence mode, HMM::forwardBatch and HMM::backwardBatch take two steps per site. They used to keep the result of
+// the first step in the alpha and beta buffers, overwriting the stored alpha of the previous site and the stored beta
+// of the next site, so batched posteriors differed from HMM::decode by up to about 0.5.
+TEST_CASE("sequence-mode posteriors match HMM::decode", "[HMM]")
 {
   // The sequence data has about 97,000 sites, so decode a window to keep the test fast
   const DecodingParams params = sequenceParams();
