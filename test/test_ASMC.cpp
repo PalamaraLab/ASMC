@@ -82,11 +82,11 @@ TEST_CASE("test ASMC decodePairsSequence", "[ASMC]")
     REQUIRE(result.perPairIndices.size() == 2ul);
 
     // 0.1% margin in this test as the results can vary between pure and avx/sse
-    REQUIRE(result.perPairPosteriorMeans(0, 0) == Approx(802.98633f).margin(802.98633f * 0.001f));
-    REQUIRE(result.perPairPosteriorMeans(1, 8) == Approx(19548.63281f).margin(19548.63281f * 0.001f));
+    REQUIRE(result.perPairPosteriorMeans(0, 0) == Approx(811.83643f).margin(811.83643f * 0.001f));
+    REQUIRE(result.perPairPosteriorMeans(1, 8) == Approx(18602.49805f).margin(18602.49805f * 0.001f));
 
     REQUIRE(result.perPairMAPs(0, 0) == 16);
-    REQUIRE(result.perPairMAPs(1, 1234) == 62);
+    REQUIRE(result.perPairMAPs(1, 1234) == 61);
 
     // Check that the posteriors actually sum to one
     for (Eigen::Index idx = 0ll; idx < result.perPairPosteriors.size(); ++idx) {

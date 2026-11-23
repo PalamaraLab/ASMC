@@ -27,6 +27,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -210,7 +211,74 @@ SummaryErrors compareSummaryWithPosterior(const std::pair<std::vector<float>, st
   return errors;
 }
 
+/**
+ * Ratio of the largest to the smallest sum_k alpha_p(k) * beta_p(k) over sites p in [from, to), for one pair.
+ *
+ * If the forward and backward passes describe the same HMM, and neither is rescaled inside the window, this sum is the
+ * likelihood of the observations in the window (up to the constant rescaling at `from` and `to - 1`) at every site, so
+ * the ratio is 1. Keep windows to a few sites: without rescaling, alpha and beta underflow single precision after
+ * about ten sites of the example data.
+ */
+double alphaBetaProductSpread(HMM& hmm, const unsigned long hapA, const unsigned long hapB, const unsigned from,
+                              const unsigned to)
+{
+  const auto [indA, haplotypeA] = asmc::hapToDipId(hapA);
+  const auto [indB, haplotypeB] = asmc::hapToDipId(hapB);
+  const PairObservations observations =
+      hmm.makePairObs(static_cast<int_least8_t>(haplotypeA), static_cast<unsigned>(indA),
+                      static_cast<int_least8_t>(haplotypeB), static_cast<unsigned>(indB));
+  const std::vector<std::vector<float>> alpha = hmm.forward(observations, from, to);
+  const std::vector<std::vector<float>> beta = hmm.backward(observations, from, to);
+
+  double smallest = std::numeric_limits<double>::infinity();
+  double largest = 0.;
+  for (auto site = from; site < to; ++site) {
+    double product = 0.;
+    for (auto state = 0ul; state < alpha.size(); ++state) {
+      product += static_cast<double>(alpha.at(state).at(site)) * beta.at(state).at(site);
+    }
+    smallest = std::min(smallest, product);
+    largest = std::max(largest, product);
+  }
+  return largest / smallest;
+}
+
+/// Check alphaBetaProductSpread for each test pair over each window of `numSites` sites starting at `windowStarts`.
+void checkForwardMatchesBackward(const DecodingParams& params, const std::vector<unsigned>& windowStarts)
+{
+  constexpr unsigned numSites = 6u;
+  // Larger than any site index, so alpha and beta are rescaled only at the ends of the window
+  constexpr int noRescaling = 1 << 30;
+
+  const Data data(params);
+  HMM hmm(data, params, noRescaling);
+  const std::vector<unsigned long> hapsA = pairHapsA();
+  const std::vector<unsigned long> hapsB = pairHapsB();
+  for (const unsigned from : windowStarts) {
+    for (auto pair = 0ul; pair < hapsA.size(); ++pair) {
+      INFO("window [" << from << ", " << from + numSites << "), pair " << pair);
+      CHECK(alphaBetaProductSpread(hmm, hapsA.at(pair), hapsB.at(pair), from, from + numSites) - 1. < 1e-5);
+    }
+  }
+}
+
 } // namespace
+
+TEST_CASE("HMM::forward and HMM::backward describe the same HMM", "[HMM]")
+{
+  // The batched passes are checked against these through HMM::decode in the tests below.
+  SECTION("array mode")
+  {
+    checkForwardMatchesBackward(arrayParams(), {1u, 1001u, 3000u});
+  }
+  // In sequence mode each site takes two steps: across the homozygous gap before a marker, then the marker itself.
+  // HMM::backward used to take them in the same order as HMM::forward, instead of the reverse, and to use the
+  // recombination rate at the wrong marker.
+  SECTION("sequence mode")
+  {
+    checkForwardMatchesBackward(sequenceParams(), {1u, 5001u, 40001u});
+  }
+}
 
 TEST_CASE("batched posteriors match HMM::decode under every SIMD target", "[HMM][SIMD]")
 {

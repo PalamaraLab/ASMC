@@ -823,21 +823,24 @@ void HMM::backwardBatch(Eigen::ArrayXf obsIsZeroBatch, Eigen::ArrayXf obsIsTwoBa
   for (long int pos = to - 2; pos >= from; pos--) {
     // get distances and rates
     float recDistFromPrevious = asmc::roundMorgans(lastGeneticPos - data.geneticPositions[pos], precision, minGenetic);
-    float currentRecRate = asmc::roundMorgans(data.recRateAtMarker[pos], precision, minGenetic);
 
     Eigen::Map<Eigen::ArrayXf> previousBeta(&m_betaBuffer[pos * states * curBatchSize], states * curBatchSize);
     Eigen::Map<Eigen::ArrayXf> lastComputedBeta(&m_betaBuffer[(pos + 1) * states * curBatchSize], states * curBatchSize);
 
     if (decodingParams.decodingSequence) {
+      // Undo forwardBatch's two steps from pos to pos + 1 in reverse order: first the marker at pos + 1, then the
+      // homozygous gap before it.
+      const float nextMarkerRecRate = asmc::roundMorgans(data.recRateAtMarker[pos + 1], precision, minGenetic);
       int physDistFromPreviousMinusOne =
           asmc::roundPhysical(lastPhysicalPos - data.physicalPositions[pos] - 1, precision);
-      float recDistFromPreviousMinusOne = asmc::roundMorgans(recDistFromPrevious - currentRecRate, precision, minGenetic);
+      const float recDistFromPreviousMinusOne =
+          asmc::roundMorgans(recDistFromPrevious - nextMarkerRecRate, precision, minGenetic);
       vector<float> homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDistFromPreviousMinusOne);
-      getPreviousBetaBatched(recDistFromPreviousMinusOne, curBatchSize, lastComputedBeta, pos, m_allZeros, m_allZeros,
-                             vec, BU, BL, betaBetweenSteps, homozEmission, homozEmission, homozEmission);
-      getPreviousBetaBatched(currentRecRate, curBatchSize, betaBetweenSteps, pos, obsIsZeroBatch, obsIsTwoBatch, vec,
-                             BU, BL, previousBeta, emission1AtSite[pos + 1], emission0minus1AtSite[pos + 1],
+      getPreviousBetaBatched(nextMarkerRecRate, curBatchSize, lastComputedBeta, pos, obsIsZeroBatch, obsIsTwoBatch, vec,
+                             BU, BL, betaBetweenSteps, emission1AtSite[pos + 1], emission0minus1AtSite[pos + 1],
                              emission2minus0AtSite[pos + 1]);
+      getPreviousBetaBatched(recDistFromPreviousMinusOne, curBatchSize, betaBetweenSteps, pos, m_allZeros, m_allZeros,
+                             vec, BU, BL, previousBeta, homozEmission, homozEmission, homozEmission);
     } else {
       getPreviousBetaBatched(recDistFromPrevious, curBatchSize, lastComputedBeta, pos, obsIsZeroBatch, obsIsTwoBatch,
                              vec, BU, BL, previousBeta, emission1AtSite[pos + 1], emission0minus1AtSite[pos + 1],
@@ -1501,22 +1504,24 @@ vector<vector<float>> HMM::backward(const PairObservations& observations, const 
   for (long int pos = to - 2; pos >= from; pos--) {
     // get distances and rates
     float recDistFromPrevious = asmc::roundMorgans(lastGeneticPos - data.geneticPositions[pos], precision, minGenetic);
-    float currentRecRate = asmc::roundMorgans(data.recRateAtMarker[pos], precision, minGenetic);
     // if both samples are carriers, there are two distinguished, otherwise, it's the
     // or (use previous xor). This affects the number of undistinguished for the site
     float obsIsZero = !observations.obsBits[pos + 1] ? 1.0f : 0.0f;
     float obsIsHomMinor = observations.homMinorBits[pos + 1] ? 1.0f : 0.0f;
     if (decodingParams.decodingSequence) {
+      // Undo HMM::forward's two steps from pos to pos + 1 in reverse order: first the marker at pos + 1, then the
+      // homozygous gap before it.
+      const float nextMarkerRecRate = asmc::roundMorgans(data.recRateAtMarker[pos + 1], precision, minGenetic);
       int physDistFromPreviousMinusOne =
           asmc::roundPhysical(lastPhysicalPos - data.physicalPositions[pos] - 1, precision);
       float recDistFromPreviousMinusOne =
-          asmc::roundMorgans(recDistFromPrevious - currentRecRate, precision, minGenetic);
+          asmc::roundMorgans(recDistFromPrevious - nextMarkerRecRate, precision, minGenetic);
       vector<float> homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDistFromPreviousMinusOne);
+      getPreviousBeta(nextMarkerRecRate, lastComputedBeta, BL, BU, currentBeta, emission1AtSite[pos + 1],
+                      emission0minus1AtSite[pos + 1], emission2minus0AtSite[pos + 1], obsIsZero, obsIsHomMinor);
+      lastComputedBeta = currentBeta;
       getPreviousBeta(recDistFromPreviousMinusOne, lastComputedBeta, BL, BU, currentBeta, homozEmission, homozEmission,
                       homozEmission, 0.0f, 0.0f);
-      lastComputedBeta = currentBeta;
-      getPreviousBeta(currentRecRate, lastComputedBeta, BL, BU, currentBeta, emission1AtSite[pos + 1],
-                      emission0minus1AtSite[pos + 1], emission2minus0AtSite[pos + 1], obsIsZero, obsIsHomMinor);
     } else {
       getPreviousBeta(recDistFromPrevious, lastComputedBeta, BL, BU, currentBeta, emission1AtSite[pos + 1],
                       emission0minus1AtSite[pos + 1], emission2minus0AtSite[pos + 1], obsIsZero, obsIsHomMinor);
