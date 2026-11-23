@@ -13,6 +13,9 @@
 //    You should have received a copy of the GNU General Public License
 //    along with ASMC.  If not, see <https://www.gnu.org/licenses/>.
 
+#include <algorithm>
+#include <cctype>
+#include <charconv>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -20,6 +23,7 @@
 #include <map>
 #include <random>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -94,27 +98,18 @@ Data::Data(const DecodingParams& params)
   }
 
   if (FastSMC) {
-    vector<pair<unsigned long, double>> geneticMap = readMapFastSMC(inFileRoot);
+    vector<pair<unsigned long, double>> geneticMap = readMapFastSMC(inFileRoot, params.mapFile);
     readHaps(inFileRoot, foldToMinorAlleles, geneticMap);
   } else {
     readHaps(inFileRoot, foldToMinorAlleles);
-    readMap(inFileRoot);
+    readMap(inFileRoot, params.mapFile);
   }
 }
 
 // *** read genetic map
 vector<pair<unsigned long, double>> Data::readMapFastSMC(const string& inFileRoot, const string& mapFile)
 {
-  std::string checkedMapFile;
-  if (checkedMapFile = mapFile; fs::is_regular_file(checkedMapFile)) {
-  } else if (checkedMapFile = inFileRoot + ".map.gz"; fs::is_regular_file(checkedMapFile)) {
-  } else if (checkedMapFile = inFileRoot + ".map"; fs::is_regular_file(checkedMapFile)) {
-  } else {
-    fmt::print(cerr, "ERROR. Could not find map file in {}.map.gz or {}.map\n", inFileRoot, inFileRoot);
-    exit(1);
-  }
-
-  auto map = asmc::GeneticMap(checkedMapFile);
+  auto map = asmc::GeneticMap(findMapFile(inFileRoot, mapFile));
 
   const std::vector<unsigned long>& physicalPositions = map.getPhysicalPositions();
   const std::vector<double>& geneticPositions = map.getGeneticPositions();
@@ -132,7 +127,7 @@ vector<pair<unsigned long, double>> Data::readMapFastSMC(const string& inFileRoo
 // unoptimized sampling of hypergeometric
 int Data::sampleHypergeometric(int populationSize, int numberOfSuccesses, int sampleSize)
 {
-  if (numberOfSuccesses < 0 || numberOfSuccesses > populationSize) {
+  if (numberOfSuccesses < 0 || numberOfSuccesses > populationSize || sampleSize > populationSize) {
     return -1;
   }
   vector<unsigned short> samplingVector;
@@ -150,14 +145,7 @@ int Data::sampleHypergeometric(int populationSize, int numberOfSuccesses, int sa
 
 void Data::readMap(const std::string& inFileRoot, const std::string& mapFile)
 {
-  std::string checkedMapFile;
-  if (checkedMapFile = mapFile; fs::is_regular_file(checkedMapFile)) {
-  } else  if (checkedMapFile = inFileRoot + ".map.gz"; fs::is_regular_file(checkedMapFile)) {
-  } else if (checkedMapFile = inFileRoot + ".map"; fs::is_regular_file(checkedMapFile)) {
-  } else {
-    fmt::print(cerr, "ERROR. Could not find map file in {}.map.gz or {}.map\n", inFileRoot, inFileRoot);
-    exit(1);
-  }
+  const std::string checkedMapFile = findMapFile(inFileRoot, mapFile);
   auto map = asmc::PlinkMap(checkedMapFile);
 
   if (map.getNumSites() != static_cast<unsigned long>(sites)) {
@@ -199,27 +187,17 @@ void Data::readMap(const std::string& inFileRoot, const std::string& mapFile)
 void Data::readSamplesList(const string& inFileRoot)
 {
   string line;
-  // Read samples file
   FileUtils::AutoGzIfstream bufferedReader;
-  if (FileUtils::fileExists(inFileRoot + ".samples")) {
-    bufferedReader.openOrExit(inFileRoot + ".samples");
-  } else if (FileUtils::fileExists(inFileRoot + ".sample")) {
-    bufferedReader.openOrExit(inFileRoot + ".sample");
-  } else {
-    cerr << "ERROR. Could not find sample file in " + inFileRoot + ".sample or " + inFileRoot + ".samples" << endl;
-    exit(1);
-  }
+  bufferedReader.openOrExit(findSamplesFile(inFileRoot));
 
-  unsigned long linesProcessed = 0u; // number of current line being processed
+  unsigned long linesProcessed = 0u; // number of samples read so far
   while (getline(bufferedReader, line)) {
     vector<string> splitStr;
     istringstream iss(line);
     string buf;
     while (iss >> buf)
       splitStr.push_back(buf);
-    // Skip first two lines (header) if present
-    if ((splitStr[0] == "ID_1" && splitStr[1] == "ID_2" && splitStr[2] == "missing") ||
-        (splitStr[0] == "0" && splitStr[1] == "0" && splitStr[2] == "0")) {
+    if (!isSampleLine(splitStr)) {
       continue;
     }
     if (isSampleInJob(linesProcessed)) {
@@ -253,24 +231,14 @@ bool Data::isSampleInJob(const unsigned long sampleIndex) const
 int Data::countHapLines(string inFileRoot)
 {
   FileUtils::AutoGzIfstream hapsBr;
-  if (FileUtils::fileExists(inFileRoot + ".hap.gz")) {
-    hapsBr.openOrExit(inFileRoot + ".hap.gz");
-  } else if (FileUtils::fileExists(inFileRoot + ".hap")) {
-    hapsBr.openOrExit(inFileRoot + ".hap");
-  } else if (FileUtils::fileExists(inFileRoot + ".haps.gz")) {
-    hapsBr.openOrExit(inFileRoot + ".haps.gz");
-  } else if (FileUtils::fileExists(inFileRoot + ".haps")) {
-    hapsBr.openOrExit(inFileRoot + ".haps");
-  } else {
-    cerr << "ERROR. Could not find hap file in " + inFileRoot + ".hap.gz, " + inFileRoot + ".hap, " +
-                ".haps.gz, or " + inFileRoot + ".haps"
-         << endl;
-    exit(1);
-  }
+  hapsBr.openOrExit(findHapsFile(inFileRoot));
   string line;
   int pos = 0;
   while (getline(hapsBr, line)) {
-    pos++;
+    // Blank lines are not sites: readHaps skips them too
+    if (line.find_first_not_of(" \t\r") != string::npos) {
+      pos++;
+    }
   }
   return pos;
 }
@@ -278,14 +246,7 @@ int Data::countHapLines(string inFileRoot)
 int Data::countSamplesLines(string inFileRoot)
 {
   FileUtils::AutoGzIfstream sampleBr;
-  if (FileUtils::fileExists(inFileRoot + ".samples")) {
-    sampleBr.openOrExit(inFileRoot + ".samples");
-  } else if (FileUtils::fileExists(inFileRoot + ".sample")) {
-    sampleBr.openOrExit(inFileRoot + ".sample");
-  } else {
-    cerr << "ERROR. Could not find sample file in " + inFileRoot + ".sample or " + inFileRoot + ".samples" << endl;
-    exit(1);
-  }
+  sampleBr.openOrExit(findSamplesFile(inFileRoot));
   string line;
   int cpt = 0;
   while (getline(sampleBr, line)) {
@@ -294,35 +255,90 @@ int Data::countSamplesLines(string inFileRoot)
     string buf;
     while (iss >> buf)
       splitStr.push_back(buf);
-    // Skip first two lines (header) if present
-    if ((splitStr[0] == "ID_1" && splitStr[1] == "ID_2" && splitStr[2] == "missing") ||
-        (splitStr[0] == "0" && splitStr[1] == "0" && splitStr[2] == "0")) {
-      continue;
+    if (isSampleLine(splitStr)) {
+      cpt++;
     }
-
-    cpt++;
   }
   sampleBr.close();
   return cpt;
 }
 
+std::string Data::findSamplesFile(const std::string& inFileRoot)
+{
+  for (const char* extension : {".samples", ".sample"}) {
+    if (FileUtils::fileExists(inFileRoot + extension)) {
+      return inFileRoot + extension;
+    }
+  }
+  throw std::runtime_error(
+      fmt::format("ERROR. Could not find sample file in {}.samples or {}.sample", inFileRoot, inFileRoot));
+}
+
+std::string Data::findHapsFile(const std::string& inFileRoot)
+{
+  for (const char* extension : {".hap.gz", ".hap", ".haps.gz", ".haps"}) {
+    if (FileUtils::fileExists(inFileRoot + extension)) {
+      return inFileRoot + extension;
+    }
+  }
+  throw std::runtime_error(
+      fmt::format("ERROR. Could not find hap file in {0}.hap.gz, {0}.hap, {0}.haps.gz or {0}.haps", inFileRoot));
+}
+
+std::string Data::findMapFile(const std::string& inFileRoot, const std::string& mapFile)
+{
+  // A map file the user named must exist: falling back to another map would silently use the wrong one
+  if (!mapFile.empty()) {
+    if (!fs::is_regular_file(mapFile)) {
+      throw std::runtime_error(fmt::format("ERROR. Map file {} does not exist", mapFile));
+    }
+    return mapFile;
+  }
+  for (const char* extension : {".map.gz", ".map"}) {
+    if (fs::is_regular_file(inFileRoot + extension)) {
+      return inFileRoot + extension;
+    }
+  }
+  throw std::runtime_error(fmt::format("ERROR. Could not find map file in {0}.map.gz or {0}.map", inFileRoot));
+}
+
+bool Data::isSampleLine(const std::vector<std::string>& fields)
+{
+  if (fields.empty()) {
+    return false;
+  }
+  const bool isHeader = fields.size() >= 3 && ((fields[0] == "ID_1" && fields[1] == "ID_2" && fields[2] == "missing") ||
+                                               (fields[0] == "0" && fields[1] == "0" && fields[2] == "0"));
+  if (isHeader) {
+    return false;
+  }
+  if (fields.size() < 2) {
+    throw std::runtime_error(
+        fmt::format("ERROR. Samples file line \"{}\" should have a family ID and an individual ID", fields.front()));
+  }
+  return true;
+}
+
+int Data::parseChromosomeNumber(const std::string& chromosome)
+{
+  // Ignore anything after a ':' (e.g. "1:12345") and a "chr" prefix in any case (e.g. "chr1")
+  std::string name = chromosome.substr(0, chromosome.find(':'));
+  const auto toLower = [](const char c) { return static_cast<char>(std::tolower(static_cast<unsigned char>(c))); };
+  if (name.size() > 3 && std::equal(name.begin(), name.begin() + 3, "chr",
+                                    [&toLower](const char a, const char b) { return toLower(a) == b; })) {
+    name = name.substr(3);
+  }
+
+  int number = 0;
+  const auto [end, error] = std::from_chars(name.data(), name.data() + name.size(), number);
+  const bool isWholeNumber = error == std::errc() && end == name.data() + name.size();
+  return isWholeNumber && number > 0 && number <= 1260 ? number : 0;
+}
+
 void Data::readHaps(string inFileRoot, bool foldToMinorAlleles)
 {
   FileUtils::AutoGzIfstream hapsBr;
-  if (FileUtils::fileExists(inFileRoot + ".hap.gz")) {
-    hapsBr.openOrExit(inFileRoot + ".hap.gz");
-  } else if (FileUtils::fileExists(inFileRoot + ".hap")) {
-    hapsBr.openOrExit(inFileRoot + ".hap");
-  } else if (FileUtils::fileExists(inFileRoot + ".haps.gz")) {
-    hapsBr.openOrExit(inFileRoot + ".haps.gz");
-  } else if (FileUtils::fileExists(inFileRoot + ".haps")) {
-    hapsBr.openOrExit(inFileRoot + ".haps");
-  } else {
-    cerr << "ERROR. Could not find hap file in " + inFileRoot + ".hap.gz, " + inFileRoot + ".hap, " +
-                ".haps.gz, or " + inFileRoot + ".haps"
-         << endl;
-    exit(1);
-  }
+  hapsBr.openOrExit(findHapsFile(inFileRoot));
 
   unsigned long pos = 0ul;
   unsigned long monomorphic = 0ul;
@@ -338,10 +354,9 @@ void Data::readHaps(string inFileRoot, bool foldToMinorAlleles)
     getline(hapsBr, line);
     int DAcount = 0;
     if (!(line.length() == 4 * sampleSize || line.length() == 4 * sampleSize + 1)) {
-      cerr << "ERROR: haps line has wrong length. Length is " << line.length() << ", should be 4*"
-           << famAndIndNameList.size() << " = " << 4 * famAndIndNameList.size() << "." << endl;
-      cerr << "\thaps line is: " << line << endl;
-      exit(1);
+      throw std::runtime_error(
+          fmt::format("ERROR: haps line has wrong length. Length is {}, but should be 4 * {} = {}.\n\tHaps line is: {}",
+                      line.length(), famAndIndNameList.size(), 4 * famAndIndNameList.size(), line));
     }
 
     int totalSamples = static_cast<int>(2 * famAndIndNameList.size());
@@ -361,8 +376,7 @@ void Data::readHaps(string inFileRoot, bool foldToMinorAlleles)
       } else if (line[2 * i + 1] == '0') {
         ind.setGenotype(i % 2 + 1, pos, !minorAlleleValue);
       } else {
-        cerr << "ERROR: hap is not '0' or '1'" << endl;
-        exit(1);
+        throw std::runtime_error(fmt::format("ERROR: hap is not '0' or '1' at site {}", pos + 1));
       }
     }
 
@@ -378,29 +392,28 @@ void Data::readHaps(string inFileRoot, bool foldToMinorAlleles)
   }
 
   hapsBr.close();
+  requireAllSitesRead(pos);
 
   cout << "Read data for " << sampleSize * 2 << " haploid samples and " << pos << " markers, " << monomorphic
        << " of which are monomorphic. This job will focus on " << FamIDList.size() * 2 << " haploid samples." << endl;
+}
+
+void Data::requireAllSitesRead(const unsigned long sitesRead) const
+{
+  // Reading stops at the first record that does not parse (e.g. a non-numeric position), which would otherwise leave
+  // the remaining sites silently empty
+  if (sitesRead != static_cast<unsigned long>(sites)) {
+    throw std::runtime_error(fmt::format("ERROR: could not read site {} of {} in the haps file: check that it has a "
+                                         "chromosome, SNP ID, numeric position and two alleles",
+                                         sitesRead + 1, sites));
+  }
 }
 
 void Data::readHaps(const string& inFileRoot, bool foldToMinorAlleles,
                     vector<pair<unsigned long int, double>>& genetic_map)
 {
   FileUtils::AutoGzIfstream hapsBr;
-  if (FileUtils::fileExists(inFileRoot + ".hap.gz")) {
-    hapsBr.openOrExit(inFileRoot + ".hap.gz");
-  } else if (FileUtils::fileExists(inFileRoot + ".hap")) {
-    hapsBr.openOrExit(inFileRoot + ".hap");
-  } else if (FileUtils::fileExists(inFileRoot + ".haps.gz")) {
-    hapsBr.openOrExit(inFileRoot + ".haps.gz");
-  } else if (FileUtils::fileExists(inFileRoot + ".haps")) {
-    hapsBr.openOrExit(inFileRoot + ".haps");
-  } else {
-    cerr << "ERROR. Could not find hap file in " + inFileRoot + ".hap.gz, " + inFileRoot + ".hap, " + ".haps.gz, or " +
-                inFileRoot + ".haps"
-         << endl;
-    exit(1);
-  }
+  hapsBr.openOrExit(findHapsFile(inFileRoot));
 
   unsigned long pos = 0ul;
   unsigned long monomorphic = 0ul;
@@ -418,37 +431,23 @@ void Data::readHaps(const string& inFileRoot, bool foldToMinorAlleles,
     getline(hapsBr, line);
     int DAcount = 0;
     if (!(line.length() == 4 * sampleSize || line.length() == 4 * sampleSize + 1)) {
-      fmt::print(stderr,
-                 "ERROR: haps line has wrong length. Length is {}, but should be 4 * {} = {}.\n\tHaps line is: {}\n",
-                 line.length(), famAndIndNameList.size(), 4 * famAndIndNameList.size(), line);
-      exit(1);
+      throw std::runtime_error(
+          fmt::format("ERROR: haps line has wrong length. Length is {}, but should be 4 * {} = {}.\n\tHaps line is: {}",
+                      line.length(), famAndIndNameList.size(), 4 * famAndIndNameList.size(), line));
     }
 
     // it is required that the rows in the haps file are sorted by increasing physical position
     if (bp > largest_bp) {
       largest_bp = bp;
     } else {
-      fmt::print(stderr,
-                 "ERROR: rows in haps data file must be ordered by increasing physical position, but two consecutive "
-                 "values were {} and {}\n",
-                 largest_bp, bp);
-      exit(1);
+      throw std::runtime_error(
+          fmt::format("ERROR: rows in haps data file must be ordered by increasing physical position, but two "
+                      "consecutive values were {} and {}",
+                      largest_bp, bp));
     }
 
     if (cur_g == 0) {
-      // splitting inputs
-      std::string delimiter = ":";
-      size_t chrpos = chr.find(delimiter);
-      if (std::string::npos == chrpos) {
-        chrNumber = std::stoi(chr);
-      } else {
-        chrNumber = std::stoi(chr.substr(0, chrpos));
-      }
-      // check if chrNumber is positive and smaller than 1260, which is the max nb of chromosomes (Ophioglossum)
-      // if it is not, set a default value to 0
-      if (chrNumber <= 0 || chrNumber > 1260) {
-        chrNumber = 0;
-      }
+      chrNumber = parseChromosomeNumber(chr);
     }
     readGeneticMap(bp, genetic_map, cur_g, pos);
     int totalSamples = 2 * sampleSize;
@@ -474,8 +473,7 @@ void Data::readHaps(const string& inFileRoot, bool foldToMinorAlleles,
         } else if (line[2 * hap1 + 1] == '0') {
           ind.setGenotype(hap1 % 2 + 1, pos, !minorAlleleValue);
         } else {
-          cerr << "ERROR: hap is not '0' or '1'" << endl;
-          exit(1);
+          throw std::runtime_error(fmt::format("ERROR: hap is not '0' or '1' at site {}", pos + 1));
         }
 
         if (line[2 * hap2 + 1] == '1') {
@@ -483,8 +481,7 @@ void Data::readHaps(const string& inFileRoot, bool foldToMinorAlleles,
         } else if (line[2 * hap2 + 1] == '0') {
           ind.setGenotype(hap2 % 2 + 1, pos, !minorAlleleValue);
         } else {
-          cerr << "ERROR: hap is not '0' or '1'" << endl;
-          exit(1);
+          throw std::runtime_error(fmt::format("ERROR: hap is not '0' or '1' at site {}", pos + 1));
         }
       }
     }
@@ -502,6 +499,7 @@ void Data::readHaps(const string& inFileRoot, bool foldToMinorAlleles,
   }
 
   hapsBr.close();
+  requireAllSitesRead(pos);
 
   cout << "Read data for " << sampleSize * 2 << " haploid samples and " << pos << " markers, " << monomorphic
        << " of which are monomorphic. This job will focus on " << FamIDList.size() * 2 << " haploid samples." << endl;
@@ -561,16 +559,15 @@ std::vector<std::vector<int>> Data::calculateUndistinguishedCounts(const int num
     const int totalSamples = totalSamplesCount[i];
 
     if (decodingUsesCSFS && numCsfsSamples > totalSamples) {
-      std::string id = SNP_IDs.size() >= i ? fmt::format("ID {}", SNP_IDs.at(i)) : fmt::format("numerical ID {}", i);
-      fmt::print(std::cerr, "ERROR. SNP with {} has {} non-missing individuals, but the CSFS requires at least {}\n",
-                 id, totalSamples, numCsfsSamples);
-      exit(1);
+      std::string id = SNP_IDs.size() > i ? fmt::format("ID {}", SNP_IDs.at(i)) : fmt::format("numerical ID {}", i);
+      throw std::runtime_error(
+          fmt::format("ERROR. SNP with {} has {} non-missing individuals, but the CSFS requires at least {}", id,
+                      totalSamples, numCsfsSamples));
     }
 
     const int ancestralAlleles = totalSamples - derivedAlleles;
     if (foldToMinorAlleles && derivedAlleles > ancestralAlleles) {
-      cerr << "Minor alleles has frequency > 50%. Data is supposed to be folded.\n";
-      exit(1);
+      throw std::runtime_error("Minor alleles has frequency > 50%. Data is supposed to be folded.");
     }
 
     for (int distinguished = 0; distinguished < 3; distinguished++) {

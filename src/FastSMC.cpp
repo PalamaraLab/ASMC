@@ -89,7 +89,7 @@ void ASMC::FastSMC::run()
   // *** read Individuals information
   {
     FileUtils::AutoGzIfstream file_samp;
-    file_samp.openOrExit(mParams.inFileRoot + ".samples");
+    file_samp.openOrExit(Data::findSamplesFile(mParams.inFileRoot));
 
     std::string line;
     std::stringstream ss;
@@ -103,9 +103,8 @@ void ASMC::FastSMC::run()
       while (iss >> buf)
         splitStr.push_back(buf);
 
-      // Skip first two lines (header) if present
-      if ((splitStr[0] == "ID_1" && splitStr[1] == "ID_2" && splitStr[2] == "missing") ||
-          (splitStr[0] == "0" && splitStr[1] == "0" && splitStr[2] == "0")) {
+      // Count samples exactly as Data does, so that linectr matches Data's sample indices
+      if (!Data::isSampleLine(splitStr)) {
         continue;
       }
 
@@ -138,7 +137,7 @@ void ASMC::FastSMC::run()
 
   {
     FileUtils::AutoGzIfstream file_haps;
-    file_haps.openOrExit(mParams.inFileRoot + ".hap.gz");
+    file_haps.openOrExit(Data::findHapsFile(mParams.inFileRoot));
 
     const auto num_ind_tot = mData.sampleSize * 2;
     const auto num_ind = all_ind.size();
