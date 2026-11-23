@@ -131,6 +131,7 @@ set(convertBinary_main
 set(ASMC_unit_tests
         ${ASMC_test_dir}/test_ASMC.cpp
         ${ASMC_test_dir}/test_binary_data_reader.cpp
+        ${ASMC_test_dir}/test_data.cpp
         ${ASMC_test_dir}/test_fastsmc_hashing_input.cpp
         ${ASMC_test_dir}/test_hashing.cpp
         ${ASMC_test_dir}/test_HMM.cpp

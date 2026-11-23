@@ -39,6 +39,10 @@ public:
   unsigned long haploidSampleSize = 0ul;
   int sites = 0;
   bool decodingUsesCSFS = false;
+
+  /// Whether each job loads only the samples in its windows (w_i, w_j). True only for FastSMC with hashing, whose
+  /// hashing step compares samples within a job's windows. Everything else loads all samples, and HMM::decodeAll
+  /// divides the pairs between jobs.
   bool mJobbing = false;
   bool foldToMinorAlleles = false;
   std::vector<float> geneticPositions = {};
@@ -74,30 +78,31 @@ public:
 
   const std::vector<std::string>& getSnpIDs() const;
 
-private:
-
   /**
-   * Determine whether a sample should be read, based on the jobID, number of jobs, and the number of lines processed.
-   * ASMC will always return true, but FastSMC will determine whether to read a sample.
+   * Whether a sample is loaded by this job: always true unless mJobbing, in which case the sample must lie in one of
+   * the job's windows.
    *
-   * @param linesProcessed the number of lines processed so far
-   * @param jobID the jobID, which will be the default value of -1 for ASMC
-   * @param jobs the number of jobs, which will be the default value of -1 for ASMC
-   * @return whether to read the sample
+   * @param sampleIndex index of the (diploid) sample in the samples file, counting from 0 after any header
    */
-  bool readSample(unsigned linesProcessed, int jobID, int jobs);
+  bool isSampleInJob(unsigned long sampleIndex) const;
+
+private:
+  int mJobInd = 1; // this job's index, 1..mJobs
+  int mJobs = 1;   // the number of jobs
 
   /**
-   * Read the samples file and populate members `FamIDList`, `IIDList` and `famAndIndNameList`.
+   * Read the samples file and populate members `FamIDList`, `IIDList` and `famAndIndNameList` with the samples in this
+   * job (see isSampleInJob).
    *
    * @param inFileRoot location of input files
-   * @param jobID the jobID which defaults to -1 indicating no jobbing
-   * @param jobs the number of jobs which defaults to -1 indicating no jobbing
    */
-  void readSamplesList(const std::string& inFileRoot, int jobID, int jobs);
+  void readSamplesList(const std::string& inFileRoot);
 
+  /// Read haplotypes for ASMC, which always loads every sample.
   void readHaps(std::string inFileRoot, bool foldToMinorAlleles);
-  void readHaps(std::string inFileRoot, bool foldToMinorAlleles, int jobID, int jobs,
+
+  /// Read haplotypes and the genetic map for FastSMC, loading only the samples in this job (see isSampleInJob).
+  void readHaps(const std::string& inFileRoot, bool foldToMinorAlleles,
                 std::vector<std::pair<unsigned long int, double>>& genetic_map);
 
   /**

@@ -104,3 +104,17 @@ instructions above. From the ``ASMC_dev`` directory:
 
    pip install --upgrade pip setuptools wheel ninja
    pip install .
+
+Regression tests
+----------------
+
+The regression tests (``ASMC_regression``) compare output with snapshots
+in ``ASMC_data/testing/regression``. If a change alters output on
+purpose, regenerate the snapshots from the build directory:
+
+.. code:: bash
+
+   ASMC_REGENERATE_SNAPSHOTS=1 ./ASMC_regression
+
+Then review the differences in the ``ASMC_data`` submodule, commit them
+there, and say in the pull request what changed and why.
