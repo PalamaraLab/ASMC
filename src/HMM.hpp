@@ -266,6 +266,10 @@ public:
                               const std::vector<unsigned long>& individualsB,
                               unsigned from, unsigned to, float cmBurnIn, int nThreads);
 
+  /// Whether decodeHapPairsParallel can produce every per-pair output currently requested: true unless per-pair
+  /// posteriors, the sum of posteriors or per-pair file output are requested, or in FastSMC mode.
+  bool canDecodeCheckpointed() const;
+
   /// Number of sites per segment in decodeHapPairsParallel's checkpointing, for a window of `numSites` sites
   /// including burn-in. About sqrt(numSites), which minimises the checkpoints plus one segment of alpha. At least 256,
   /// so that short windows are not split into many segments.

@@ -143,6 +143,14 @@ void ASMC::ASMC::decodePairs(const std::vector<unsigned long>& hapIndicesA,
         fmt::format("Vector of A indices ({}) must be the same size as vector of B indices ({}).\n", hapIndicesA.size(),
                     hapIndicesB.size()));
   }
+
+  // The checkpointed path gives bit-identical posterior means and MAPs, with O(sqrt(sites)) memory instead of full
+  // alpha and beta tables, so use it whenever nothing else is requested
+  if (mHmm.canDecodeCheckpointed()) {
+    decodePairsParallel(hapIndicesA, hapIndicesB, from, to, cmBurnIn, /*nThreads=*/1);
+    return;
+  }
+
   const long int seqLen = to > from ? to - from : mData.sites;
   mHmm.getDecodePairsReturnStruct().initialise(
       hapIndicesA, hapIndicesB, seqLen, mHmm.getDecodingQuantities().states, mHmm.getStorePerPairPosterior(),

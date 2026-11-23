@@ -58,12 +58,16 @@ struct TestPairs {
   }
 };
 
-/// Check that every output decodePairsParallel produces is identical to decodePairs's, for 1 to 4 threads.
-/// With 1 thread, decodePairsParallel falls back to decodePairs's code.
+/// Check that every output decodePairsParallel produces is identical to that of decodePairs's full-table path, for 1
+/// to 4 threads.
 void checkParallelMatchesSequential(ASMC::ASMC& asmc, const TestPairs& pairs, const unsigned from, const unsigned to)
 {
+  // Asking for the sum of posteriors too makes decodePairs use the full-table path; it does not change the means or
+  // MAPs
+  asmc.setStoreSumOfPosterior(true);
   asmc.decodePairs(pairs.hapsA, pairs.hapsB, from, to);
   const DecodePairsReturnStruct expected = asmc.getCopyOfResults();
+  asmc.setStoreSumOfPosterior(false);
 
   for (const int numThreads : {1, 2, 3, 4}) {
     INFO(numThreads << " threads, " << pairs.hapsA.size() << " pairs, sites [" << from << ", " << to << ")");
@@ -151,6 +155,31 @@ TEST_CASE("parallel decoding matches decodePairs in sequence mode", "[ASMC][para
   ASMC::ASMC asmc(makeParams(ASMC_DATA_DIR "/examples/asmc/exampleFile.n300", "sequence"));
   asmc.setStorePerPairMap();
   checkParallelMatchesSequential(asmc, TestPairs(37ul), 5000u, 7000u);
+}
+
+TEST_CASE("decodePairs stores MAPs without posterior means", "[ASMC][parallel]")
+{
+  // decodePairs uses the checkpointed path when only means and MAPs are requested. The full-table path stores MAPs
+  // only when posterior means are stored too (#57 A7), so this failed before decodePairs used the checkpointed path.
+  // Separate objects, because a second decode on the same object reuses the first one's arrays, which would still hold
+  // its MAPs (#57 A7)
+  const DecodingParams params = makeParams(ASMC_DATA_DIR "/examples/asmc/exampleFile.n300.array", "array");
+  const TestPairs pairs(37ul);
+
+  ASMC::ASMC asmcWithMeans(params);
+  asmcWithMeans.setStorePerPairMap();
+  asmcWithMeans.decodePairs(pairs.hapsA, pairs.hapsB);
+  const DecodePairsReturnStruct withMeans = asmcWithMeans.getCopyOfResults();
+
+  ASMC::ASMC asmcWithoutMeans(params);
+  asmcWithoutMeans.setStorePerPairMap();
+  asmcWithoutMeans.setStorePerPairPosteriorMean(false);
+  asmcWithoutMeans.decodePairs(pairs.hapsA, pairs.hapsB);
+  const DecodePairsReturnStruct withoutMeans = asmcWithoutMeans.getCopyOfResults();
+
+  REQUIRE(withoutMeans.perPairMAPs.rows() == withMeans.perPairMAPs.rows());
+  REQUIRE(withoutMeans.perPairMAPs.cols() == withMeans.perPairMAPs.cols());
+  CHECK((withoutMeans.perPairMAPs == withMeans.perPairMAPs).all());
 }
 
 TEST_CASE("parallel decoding rejects outputs it does not produce", "[ASMC][parallel]")

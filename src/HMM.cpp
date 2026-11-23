@@ -537,9 +537,8 @@ void HMM::decodeHapPairsParallel(const std::vector<unsigned long>& hapsA, const 
                                   const unsigned from, unsigned to, const float cmBurnIn, int nThreads)
 {
   // The parallel path produces only per-pair posterior means and MAPs, so reject anything else rather than leave it
-  // empty. Posterior sums (doPosteriorSums) are not rejected: decodePairs never returns them.
-  if (m_storePerPairPosterior || m_storeSumOfPosterior || m_writePerPairPosteriorMean || m_writePerPairMAP ||
-      decodingParams.FastSMC) {
+  // empty
+  if (!canDecodeCheckpointed()) {
     throw std::invalid_argument(
         "Parallel decoding produces only per-pair posterior means and MAPs. Turn off storing per-pair posteriors, "
         "storing the sum of posteriors and writing per-pair output, or use decodePairs.");
@@ -585,6 +584,13 @@ void HMM::decodeHapPairsParallel(const std::vector<unsigned long>& hapsA, const 
   }
 
   storeBatchSummaries(batches, summaries);
+}
+
+bool HMM::canDecodeCheckpointed() const
+{
+  // Posterior sums (doPosteriorSums) do not count: decodePairs never returns them, only decodeAll does
+  return !(m_storePerPairPosterior || m_storeSumOfPosterior || m_writePerPairPosteriorMean || m_writePerPairMAP ||
+           decodingParams.FastSMC);
 }
 
 unsigned HMM::checkpointSegmentLength(const unsigned numSites)
