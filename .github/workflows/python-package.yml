@@ -58,7 +58,7 @@ jobs:
             arch: arm64
             py-vers-full: cp310-* cp311-* cp312-* cp313-* cp314-*
             py-vers-pr: cp314-*
-            before-all: brew install boost zlib
+            before-all: brew install boost zlib libomp
             extra-env: CC=clang CXX=clang++
             mdt: 15
 

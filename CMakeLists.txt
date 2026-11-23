@@ -202,11 +202,15 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(fmt)
 target_link_libraries(ASMC PRIVATE fmt::fmt)
 
-# OpenMP for parallel pair decoding
-if(APPLE)
-    # Apple Clang needs explicit paths to Homebrew libomp
-    execute_process(COMMAND brew --prefix libomp OUTPUT_VARIABLE LIBOMP_PREFIX OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if(EXISTS "${LIBOMP_PREFIX}")
+# OpenMP for parallel pair decoding. Optional: without it, decodePairsParallel decodes on one thread.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+    # Apple Clang ships without an OpenMP runtime, so point it at Homebrew's libomp if there is one
+    find_program(BREW_EXECUTABLE brew)
+    if(BREW_EXECUTABLE)
+        execute_process(COMMAND ${BREW_EXECUTABLE} --prefix libomp OUTPUT_VARIABLE LIBOMP_PREFIX
+                        OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    endif()
+    if(LIBOMP_PREFIX AND EXISTS "${LIBOMP_PREFIX}/include/omp.h")
         set(OpenMP_C_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include" CACHE STRING "" FORCE)
         set(OpenMP_CXX_FLAGS "-Xpreprocessor -fopenmp -I${LIBOMP_PREFIX}/include" CACHE STRING "" FORCE)
         set(OpenMP_C_LIB_NAMES "omp" CACHE STRING "" FORCE)
