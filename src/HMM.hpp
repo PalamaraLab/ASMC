@@ -355,14 +355,17 @@ private:
   void decodeBatch(const std::vector<PairObservations>& obsBatch, unsigned from, unsigned to);
 
   // Forward pass: write alpha into alphaBuffer. Used by both sequential and parallel paths.
+  // allZeros holds zeros laid out like obsIsZero (site * curBatchSize + pair); it stands in for the observations in
+  // the homozygous step of sequence mode. It is not modified, but the step functions take non-const references.
   void forwardPassInto(Eigen::Ref<Eigen::ArrayXf> alphaBuffer, Eigen::Ref<Eigen::ArrayXf> scalingBuffer,
-                       const Eigen::ArrayXf& allZeros,
+                       Eigen::Ref<Eigen::ArrayXf> allZeros,
                        Eigen::Ref<Eigen::ArrayXf> obsIsZero, Eigen::Ref<Eigen::ArrayXf> obsIsTwo,
                        int curBatchSize, unsigned from, unsigned to);
 
-  // Backward pass: write beta into betaBuffer. Used by both sequential and parallel paths.
+  // Backward pass: write beta into betaBuffer. Used by both sequential and parallel paths. allZeros as in
+  // forwardPassInto.
   void backwardPassInto(Eigen::Ref<Eigen::ArrayXf> betaBuffer, Eigen::Ref<Eigen::ArrayXf> scalingBuffer,
-                        const Eigen::ArrayXf& allZeros,
+                        Eigen::Ref<Eigen::ArrayXf> allZeros,
                         Eigen::Ref<Eigen::ArrayXf> obsIsZero, Eigen::Ref<Eigen::ArrayXf> obsIsTwo,
                         int curBatchSize, unsigned from, unsigned to);
 

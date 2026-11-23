@@ -906,7 +906,7 @@ void HMM::decodeBatch(const vector<PairObservations>& obsBatch, const unsigned f
 // Forward pass writing into caller-provided alpha buffer.
 // Thread-safe: only reads shared state (emission tables, decoding quantities).
 void HMM::forwardPassInto(Eigen::Ref<Eigen::ArrayXf> alphaBuffer, Eigen::Ref<Eigen::ArrayXf> scalingBuffer,
-                          const Eigen::ArrayXf& allZeros,
+                          Eigen::Ref<Eigen::ArrayXf> allZeros,
                           Eigen::Ref<Eigen::ArrayXf> obsIsZero, Eigen::Ref<Eigen::ArrayXf> obsIsTwo,
                           int curBatchSize, const unsigned from, const unsigned to)
 {
@@ -947,9 +947,7 @@ void HMM::forwardPassInto(Eigen::Ref<Eigen::ArrayXf> alphaBuffer, Eigen::Ref<Eig
       int physDist = asmc::roundPhysical(data.physicalPositions[pos] - lastPhysicalPos - 1, precision);
       float recDistM1 = asmc::roundMorgans(recDist - currentRecRate, precision, minGenetic);
       auto homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDist);
-      // Cast away const for allZeros — getNextAlphaBatched takes Ref but does not modify obs arrays
-      Eigen::ArrayXf zeros = allZeros;
-      getNextAlphaBatched(recDistM1, alphaC, curBatchSize, prevAlpha, pos, zeros, zeros,
+      getNextAlphaBatched(recDistM1, alphaC, curBatchSize, prevAlpha, pos, allZeros, allZeros,
                           AU, alphaBetweenSteps, homozEmission, homozEmission, homozEmission);
       getNextAlphaBatched(currentRecRate, alphaC, curBatchSize, alphaBetweenSteps, pos, obsIsZero, obsIsTwo, AU,
                           nextAlpha, emission1AtSite[pos], emission0minus1AtSite[pos], emission2minus0AtSite[pos]);
@@ -1004,7 +1002,7 @@ void HMM::getNextAlphaBatched(float recDistFromPrevious, Eigen::Ref<Eigen::Array
 // Backward pass writing into caller-provided beta buffer.
 // Thread-safe: only reads shared state (emission tables, decoding quantities).
 void HMM::backwardPassInto(Eigen::Ref<Eigen::ArrayXf> betaBuffer, Eigen::Ref<Eigen::ArrayXf> scalingBuffer,
-                           const Eigen::ArrayXf& allZeros,
+                           Eigen::Ref<Eigen::ArrayXf> allZeros,
                            Eigen::Ref<Eigen::ArrayXf> obsIsZero, Eigen::Ref<Eigen::ArrayXf> obsIsTwo,
                            int curBatchSize, const unsigned from, const unsigned to)
 {
@@ -1043,11 +1041,10 @@ void HMM::backwardPassInto(Eigen::Ref<Eigen::ArrayXf> betaBuffer, Eigen::Ref<Eig
       int physDist = asmc::roundPhysical(lastPhysicalPos - data.physicalPositions[pos] - 1, precision);
       float recDistM1 = asmc::roundMorgans(recDist - nextMarkerRecRate, precision, minGenetic);
       auto homozEmission = m_decodingQuant.homozygousEmissionMap.at(physDist);
-      Eigen::ArrayXf zeros = allZeros;
       getPreviousBetaBatched(nextMarkerRecRate, curBatchSize, lastBeta, pos, obsIsZero, obsIsTwo, vec,
                              BU, BL, betaBetweenSteps, emission1AtSite[pos + 1],
                              emission0minus1AtSite[pos + 1], emission2minus0AtSite[pos + 1]);
-      getPreviousBetaBatched(recDistM1, curBatchSize, betaBetweenSteps, pos, zeros, zeros,
+      getPreviousBetaBatched(recDistM1, curBatchSize, betaBetweenSteps, pos, allZeros, allZeros,
                              vec, BU, BL, prevBeta, homozEmission, homozEmission, homozEmission);
     } else {
       getPreviousBetaBatched(recDist, curBatchSize, lastBeta, pos, obsIsZero, obsIsTwo,
