@@ -193,8 +193,12 @@ class TestASMCDecodePairsAPI(unittest.TestCase):
         # 70 pairs fill more than one batch at the default batch size of 64
         a = list(range(0, 140, 2))
         b = list(range(299, 89, -3))
+
+        # Asking for the sum of posteriors too makes decode_pairs use the full-table path
+        asmc.set_store_sum_of_posterior(True)
         asmc.decode_pairs(a, b)
         expected = asmc.get_copy_of_results()
+        asmc.set_store_sum_of_posterior(False)
 
         asmc.decode_pairs_parallel(a, b, n_threads=2)
         actual = asmc.get_copy_of_results()
