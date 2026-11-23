@@ -157,13 +157,31 @@ Data::Data(std::vector<int> derivedCounts, std::vector<int> totalCounts,
   geneticPositions = std::move(genPos);
   derivedAlleleCounts = std::move(derivedCounts);
   totalSamplesCount = std::move(totalCounts);
-  siteWasFlippedDuringFolding = std::vector<bool>(sites, false);
   computeRecombinationRates();
+
+  if (totalSamplesCount.size() != derivedAlleleCounts.size()) {
+    throw std::invalid_argument(
+        fmt::format("Expected {} total sample counts, one per site, but got {}", sites, totalSamplesCount.size()));
+  }
+
+  // Fold to the minor allele if requested, as the in-memory genotype constructor does. setGenotypes flips genotypes
+  // loaded later at the same sites.
+  siteWasFlippedDuringFolding = std::vector<bool>(sites, false);
+  for (int site = 0; site < sites; site++) {
+    const int derived = derivedAlleleCounts[site];
+    const int total = totalSamplesCount[site];
+    if (derived < 0 || derived > total) {
+      throw std::invalid_argument(fmt::format(
+          "Site {} has {} derived alleles out of {}; the count must be between 0 and the total", site, derived, total));
+    }
+    if (foldToMinorAlleles && derived > total - derived) {
+      siteWasFlippedDuringFolding[site] = true;
+      derivedAlleleCounts[site] = total - derived;
+    }
+  }
 }
 
 // Load a subset of haplotypes for pair decoding. Called between decode batches.
-// The caller must pre-fold genotypes (flip sites where derived > ancestral)
-// to match the folded allele counts used for emission computation.
 // Does NOT recompute emissions — allele counts are already set from the constructor.
 void Data::loadSubsetGenotypes(const int8_t* haplotypes, int numSubsetHaps)
 {
@@ -196,8 +214,12 @@ void Data::setGenotypes(const int8_t* haplotypes, const int numHaps)
   // A 1 is the derived allele, so at a site flipped during folding it is the major allele
   for (int site = 0; site < sites; site++) {
     for (int hap = 0; hap < numHaps; hap++) {
-      const bool isOne = haplotypes[static_cast<std::size_t>(site) * numHaps + hap] == 1;
-      individuals[hap / 2].setGenotype((hap % 2) + 1, site, isOne != siteWasFlippedDuringFolding[site]);
+      const int8_t genotype = haplotypes[static_cast<std::size_t>(site) * numHaps + hap];
+      if (genotype != 0 && genotype != 1) {
+        throw std::invalid_argument(
+            fmt::format("Genotype at site {}, haplotype {} is {}, but must be 0 or 1", site, hap, genotype));
+      }
+      individuals[hap / 2].setGenotype((hap % 2) + 1, site, (genotype == 1) != siteWasFlippedDuringFolding[site]);
     }
   }
 }

@@ -32,8 +32,15 @@ class ASMC
 
 private:
   DecodingParams mParams;
-  Data mData;
+
+  // Owns the only copy of the data. ASMC reads it through data(), so that genotypes loaded with loadSubsetGenotypes
+  // are seen everywhere.
   HMM mHmm;
+
+  const Data& data() const
+  {
+    return mHmm.getData();
+  }
 
 public:
   /**

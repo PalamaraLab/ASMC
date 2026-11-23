@@ -34,27 +34,15 @@
 namespace {
 // Helpers shared by from_arrays/from_counts pybind factories
 
-DecodingParams makeDecodingParams(const std::string& dq_file, bool use_ancestral,
-                                  float skip_csfs_distance, const std::string& decoding_mode) {
-  bool fold = !use_ancestral;
-  bool usingCSFS = (skip_csfs_distance != std::numeric_limits<float>::infinity());
-  bool isSequence = (decoding_mode == "sequence");
-  DecodingParams params;
-  params.decodingQuantFile = dq_file;
-  params.decodingModeString = decoding_mode;
-  params.decodingModeOverall = isSequence ? DecodingModeOverall::sequence : DecodingModeOverall::array;
-  params.decodingMode = isSequence
-      ? (fold ? DecodingMode::sequenceFolded : DecodingMode::sequence)
-      : (fold ? DecodingMode::arrayFolded : DecodingMode::array);
-  params.decodingSequence = isSequence;
-  params.usingCSFS = usingCSFS;
-  params.compress = false;
-  params.useAncestral = use_ancestral;
-  params.skipCSFSdistance = skip_csfs_distance;
-  params.foldData = fold;
-  params.noBatches = false;
-  params.FastSMC = false;
-  return params;
+// Parameters for in-memory input. The validating constructor checks the decoding mode (in any case) and sets the
+// folding and CSFS options from use_ancestral and skip_csfs_distance, as for file input. It reads no input files.
+// usingCSFS starts false and is turned on unless skip_csfs_distance is infinite.
+DecodingParams makeDecodingParams(const std::string& dq_file, bool use_ancestral, float skip_csfs_distance,
+                                  const std::string& decoding_mode)
+{
+  return DecodingParams(/*_inFileRoot=*/"", dq_file, /*_outFileRoot=*/"", /*_jobs=*/1, /*_jobInd=*/1, decoding_mode,
+                        /*_decodingSequence=*/false, /*_usingCSFS=*/false, /*_compress=*/false, use_ancestral,
+                        skip_csfs_distance);
 }
 
 std::pair<std::vector<int>, std::vector<float>> copyPositions(
@@ -315,11 +303,9 @@ PYBIND11_MODULE(asmc_python_bindings, m)
               throw std::invalid_argument("position arrays must have length == num_sites");
             auto num_diploid = static_cast<unsigned long>(num_haps / 2);
             auto [physPos, genPos] = copyPositions(physical_positions, genetic_positions, num_sites);
-            bool fold = !use_ancestral;
-            bool usingCSFS = (skip_csfs_distance != std::numeric_limits<float>::infinity());
-            Data data(num_sites, num_diploid, std::move(physPos), std::move(genPos),
-                      genotypes.data(), usingCSFS, fold);
             auto params = makeDecodingParams(dq_file, use_ancestral, skip_csfs_distance, decoding_mode);
+            Data data(num_sites, num_diploid, std::move(physPos), std::move(genPos), genotypes.data(), params.usingCSFS,
+                      params.foldData);
             return std::make_unique<ASMC::ASMC>(std::move(params), std::move(data));
           },
           "genotypes"_a, "physical_positions"_a, "genetic_positions"_a,
@@ -345,12 +331,13 @@ PYBIND11_MODULE(asmc_python_bindings, m)
               throw std::invalid_argument("position arrays must have length == num_sites");
             auto [physPos, genPos] = copyPositions(physical_positions, genetic_positions, num_sites);
             std::vector<int> dacVec(num_sites), tscVec(num_sites);
-            for (int i = 0; i < num_sites; i++) { dacVec[i] = dac(i); tscVec[i] = tsc(i); }
-            bool fold = !use_ancestral;
-            bool usingCSFS = (skip_csfs_distance != std::numeric_limits<float>::infinity());
-            Data data(std::move(dacVec), std::move(tscVec),
-                      std::move(physPos), std::move(genPos), usingCSFS, fold);
+            for (int i = 0; i < num_sites; i++) {
+              dacVec[i] = dac(i);
+              tscVec[i] = tsc(i);
+            }
             auto params = makeDecodingParams(dq_file, use_ancestral, skip_csfs_distance, decoding_mode);
+            Data data(std::move(dacVec), std::move(tscVec), std::move(physPos), std::move(genPos), params.usingCSFS,
+                      params.foldData);
             return std::make_unique<ASMC::ASMC>(std::move(params), std::move(data));
           },
           "derived_allele_counts"_a, "total_sample_counts"_a,
