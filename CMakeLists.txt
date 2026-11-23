@@ -137,6 +137,7 @@ set(ASMC_unit_tests
         ${ASMC_test_dir}/test_HMM.cpp
         ${ASMC_test_dir}/test_hmm_posteriors.cpp
         ${ASMC_test_dir}/test_hmm_utils.cpp
+        ${ASMC_test_dir}/test_parallel_decoding.cpp
         ${ASMC_test_dir}/test_string_utils.cpp
         ${ASMC_test_dir}/test_test_fixtures.cpp
         ${ASMC_test_dir}/test_decoding_params.cpp

@@ -23,15 +23,12 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <stdexcept>
 #include <utility>
 
 #include <Eigen/Core>
 
 #include <fmt/format.h>
-
-#ifdef _OPENMP
-#include <omp.h>
-#endif
 
 #include "HmmUtils.hpp"
 #include "Simd.hpp"
@@ -39,6 +36,34 @@
 #include "Timer.hpp"
 
 using namespace std;
+
+namespace
+{
+
+/**
+ * Fill the batched observation indicators for sites [from, to) of a batch of pairs.
+ *
+ * Each pair's obsBits and homMinorBits must start at `from`: makeBits(obs, from, to) has been applied, or `from` is 0.
+ * Both outputs are laid out [site * batchSize + pair] over the whole chromosome; sites outside [from, to) are left
+ * unchanged.
+ *
+ * @param batch the pairs, padded to a multiple of the SIMD lane count
+ * @param obsIsZero set to 1 where the pair's observation at the site is 0 (neither carries the minor allele), else 0
+ * @param obsIsTwo set to 1 where both haplotypes carry the minor allele, else 0
+ */
+void fillBatchObservations(const vector<PairObservations>& batch, const unsigned from, const unsigned to,
+                           Eigen::Ref<Eigen::ArrayXf> obsIsZero, Eigen::Ref<Eigen::ArrayXf> obsIsTwo)
+{
+  const auto batchSize = static_cast<long int>(batch.size());
+  for (long int pos = from; pos < to; pos++) {
+    for (long int pair = 0; pair < batchSize; pair++) {
+      obsIsZero[pos * batchSize + pair] = !batch[pair].obsBits[pos - from] ? 1.0f : 0.0f;
+      obsIsTwo[pos * batchSize + pair] = batch[pair].homMinorBits[pos - from] ? 1.0f : 0.0f;
+    }
+  }
+}
+
+} // namespace
 
 // read expected times from a file
 vector<float> readExpectedTimesFromIntervalsFile(const char* fileName)
@@ -513,6 +538,16 @@ void HMM::decodeHapPairs(const std::vector<unsigned long>& hapsA, const std::vec
 void HMM::decodeHapPairsParallel(const std::vector<unsigned long>& hapsA, const std::vector<unsigned long>& hapsB,
                                   const unsigned from, unsigned to, const float cmBurnIn, int nThreads)
 {
+  // The parallel path produces only per-pair posterior means and MAPs, so reject anything else rather than leave it
+  // empty. Checked before the fallbacks below so that the same requests fail with or without OpenMP. Posterior sums
+  // (doPosteriorSums) are not rejected: decodePairs never returns them.
+  if (m_storePerPairPosterior || m_storeSumOfPosterior || m_writePerPairPosteriorMean || m_writePerPairMAP ||
+      decodingParams.FastSMC) {
+    throw std::invalid_argument(
+        "Parallel decoding produces only per-pair posterior means and MAPs. Turn off storing per-pair posteriors, "
+        "storing the sum of posteriors and writing per-pair output, or use decodePairs.");
+  }
+
 #ifndef _OPENMP
   // Fall back to sequential if OpenMP not available
   decodeHapPairs(hapsA, hapsB, from, to, cmBurnIn);
@@ -593,9 +628,9 @@ void HMM::decodeHapPairsParallel(const std::vector<unsigned long>& hapsA, const 
   };
   std::vector<BatchResult> batchResults(numBatches);
 
-  omp_set_num_threads(nThreads);
-
-  #pragma omp parallel
+// A num_threads clause rather than omp_set_num_threads, which would change the thread count for any other OpenMP
+// code in the process (for example numpy's, when called from Python).
+#pragma omp parallel num_threads(nThreads)
   {
     // Thread-local buffers
     Eigen::ArrayXf localAlpha(seqLength * states * batchSz);
@@ -616,7 +651,7 @@ void HMM::decodeHapPairsParallel(const std::vector<unsigned long>& hapsA, const 
       localMAPValue.resize(batchSz);
     }
 
-    #pragma omp for schedule(dynamic)
+#pragma omp for schedule(dynamic)
     for (size_t bIdx = 0; bIdx < numBatches; ++bIdx) {
       auto& batch = batches[bIdx];
       int curBatchSize = static_cast<int>(batch.size());
@@ -625,13 +660,7 @@ void HMM::decodeHapPairsParallel(const std::vector<unsigned long>& hapsA, const 
       // Build observation bit arrays
       Eigen::ArrayXf obsIsZero(seqLength * curBatchSize);
       Eigen::ArrayXf obsIsTwo(seqLength * curBatchSize);
-
-      for (long int pos = adjFrom; pos < adjTo; pos++) {
-        for (int v = 0; v < curBatchSize; v++) {
-          obsIsZero[pos * curBatchSize + v] = (!batch[v].obsBits[pos - adjFrom] ? 1.0f : 0.0f);
-          obsIsTwo[pos * curBatchSize + v] = (batch[v].homMinorBits[pos - adjFrom] ? 1.0f : 0.0f);
-        }
-      }
+      fillBatchObservations(batch, adjFrom, adjTo, obsIsZero, obsIsTwo);
 
       // Forward and backward using shared helper methods with thread-local buffers
       forwardPassInto(localAlpha, localScaling, localAllZeros, obsIsZero, obsIsTwo, curBatchSize, adjFrom, adjTo);
@@ -873,13 +902,7 @@ void HMM::decodeBatch(const vector<PairObservations>& obsBatch, const unsigned f
 
   Eigen::ArrayXf obsIsZeroBatch(sequenceLength * curBatchSize);
   Eigen::ArrayXf obsIsTwoBatch(sequenceLength * curBatchSize);
-
-  for (long int pos = from; pos < to; pos++) {
-    for (int v = 0; v < curBatchSize; v++) {
-      obsIsZeroBatch[pos * curBatchSize + v] = (!obsBatch[v].obsBits[pos - from] ? 1.0f : 0.0f);
-      obsIsTwoBatch[pos * curBatchSize + v] = (obsBatch[v].homMinorBits[pos - from] ? 1.0f : 0.0f);
-    }
-  }
+  fillBatchObservations(obsBatch, from, to, obsIsZeroBatch, obsIsTwoBatch);
 
   auto t0 = std::chrono::high_resolution_clock::now();
 

@@ -247,6 +247,9 @@ public:
 
   /// Parallel version: splits pairs across threads, each with independent buffers.
   /// Requires OpenMP. Falls back to sequential if nThreads <= 1 or OpenMP unavailable.
+  /// Produces only per-pair posterior means, MAPs and pair indices, which are the same as decodeHapPairs's. Throws
+  /// std::invalid_argument if per-pair posteriors, the sum of posteriors or per-pair file output are requested, or in
+  /// FastSMC mode.
   void decodeHapPairsParallel(const std::vector<unsigned long>& individualsA,
                               const std::vector<unsigned long>& individualsB,
                               unsigned from, unsigned to, float cmBurnIn, int nThreads);
