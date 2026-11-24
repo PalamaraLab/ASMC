@@ -1,86 +1,155 @@
-"""Convenience constructors for ASMC from common upstream formats.
+"""Construct ASMC from common phased-haplotype formats.
 
-ASMC's C++ side accepts in-memory genotype arrays via ``ASMC.from_arrays``
-and allele-count summaries via ``ASMC.from_counts``. These helpers bridge
-the gap from the formats other tools in the workflow already use:
+``ASMC.from_arrays`` takes genotypes and positions as arrays. These helpers
+read them from the formats other tools in the workflow already produce:
 
-* ``from_pgen`` — PLINK 2 binary genotype trio (``.pgen`` / ``.pvar`` /
-  ``.psam``). Same format that threads-arg consumes natively.
-* ``from_vcf`` — phased VCF/BCF. Slower than pgen for large data but the
-  most portable starting point.
-* ``from_haps`` — Eagle / SHAPEIT (``.hap[.gz]`` / ``.sample`` /
-  ``.map``). What arg-needle and the legacy ASMC file path read today.
+* ``from_pgen``: a PLINK 2 ``.pgen`` / ``.pvar`` / ``.psam`` trio (needs
+  ``Pgenlib``).
+* ``from_vcf``: a phased VCF or BCF (needs ``cyvcf2``).
+* ``from_haps``: an Eagle / SHAPEIT ``.hap[.gz]`` / ``.samples`` /
+  ``.map[.gz]`` set, read by the file-based ``ASMC`` constructor.
 
-All three return a fully-built ``ASMC`` object with per-pair posterior
-mean storage already enabled — equivalent to::
+Install the optional readers with ``pip install asmc-asmc[io]``.
 
-    asmc = ASMC.from_arrays(genotypes, physical_positions,
-                            genetic_positions_in_morgans, dq_file)
-    asmc.set_store_per_pair_posterior_mean()
+The data must be phased: an unphased heterozygous call is an error.
 
-Genetic positions on disk are in cM; ASMC's internal representation is
-Morgans (the legacy ``.map`` reader divides by 100 internally). Each
-helper handles that conversion so callers always pass on-disk units.
+``from_pgen`` and ``from_vcf`` take genetic positions from a PLINK-style map
+(chromosome, SNP ID, cM, bp), interpolated linearly at each site, as the
+file-based reader does. Sites beyond either end of the map take the cM of
+that end. ASMC works in Morgans, so the cM values are divided by 100.
+
+Every ``ASMC`` constructor, including these, turns on per-pair posterior
+mean storage.
 """
 
 from __future__ import annotations
 
 import gzip
+import importlib
 import os
 import pathlib
+import warnings
 from typing import Optional, Tuple
 
 import numpy as np
 
-from .asmc_python_bindings import ASMC
+from .asmc_python_bindings import ASMC, DecodingParams
 
 
-__all__ = ["from_pgen", "from_vcf", "from_haps", "PathLike"]
+__all__ = ["from_pgen", "from_vcf", "from_haps"]
 
 
 PathLike = os.PathLike[str] | str
 
 
-def _interp_cm(physical: np.ndarray, map_phys: np.ndarray,
-               map_cm: np.ndarray) -> np.ndarray:
-    """Linear interpolation of cM at given physical positions."""
-    if map_phys.size < 2:
-        raise ValueError("genetic map needs at least two anchor points")
-    if not (map_phys[0] <= physical[0] and physical[-1] <= map_phys[-1]):
-        # Allow extrapolation but warn — common when chr ends are missing.
-        # np.interp clamps at the edges, which is what we want here.
-        pass
-    return np.interp(physical.astype(np.float64),
-                     map_phys.astype(np.float64),
-                     map_cm.astype(np.float64))
+def _import_optional(module: str, package: str, caller: str):
+    try:
+        return importlib.import_module(module)
+    except ImportError as e:
+        raise ImportError(
+            f"{caller} needs the '{package}' package: "
+            f"`pip install {package}` or `pip install asmc-asmc[io]`") from e
 
 
 def _read_genetic_map(map_path: PathLike) -> Tuple[np.ndarray, np.ndarray]:
-    """Read a 4-column PLINK-style genetic map (chr, snp_id, cM, bp).
+    """Read a PLINK-style genetic map (chromosome, SNP ID, cM, bp).
 
-    Returns (physical_bp, cM) sorted by bp ascending.
+    A first line that does not parse is taken as a header. Returns
+    (bp, cM), sorted by bp.
     """
     phys = []
     cm = []
     opener = gzip.open if str(map_path).endswith(".gz") else open
     with opener(map_path, "rt") as f:
-        first = f.readline()
-        # tolerate optional header
-        try:
-            parts = first.split()
-            float(parts[2]); int(parts[3])
-            phys.append(int(parts[3])); cm.append(float(parts[2]))
-        except (IndexError, ValueError):
-            pass
-        for line in f:
+        for line_number, line in enumerate(f, start=1):
             parts = line.split()
-            if len(parts) < 4:
+            if not parts:
                 continue
-            phys.append(int(parts[3])); cm.append(float(parts[2]))
+            try:
+                if len(parts) < 4:
+                    raise ValueError
+                cm_value, bp = float(parts[2]), int(parts[3])
+            except ValueError:
+                if line_number == 1:
+                    continue
+                raise ValueError(
+                    f"{map_path}, line {line_number}: expected chromosome, "
+                    f"SNP ID, cM and bp, got {line.strip()!r}") from None
+            phys.append(bp)
+            cm.append(cm_value)
+    if len(phys) < 2:
+        raise ValueError(f"{map_path}: a genetic map needs at least two rows")
     phys = np.asarray(phys, dtype=np.int64)
     cm = np.asarray(cm, dtype=np.float64)
-    order = np.argsort(phys)
-    return phys[order], cm[order]
+    order = np.argsort(phys, kind="stable")
+    phys, cm = phys[order], cm[order]
+    if np.any(np.diff(cm) < 0):
+        raise ValueError(f"{map_path}: cM decreases as bp increases")
+    return phys, cm
+
+
+def _from_genotypes(geno: np.ndarray, phys: np.ndarray, map_file: PathLike,
+                    dq_file: PathLike, use_ancestral: bool,
+                    skip_csfs_distance: float, decoding_mode: str) -> ASMC:
+    """Check positions, add genetic positions and call ASMC.from_arrays.
+
+    geno is (sites, haplotypes) in {0, 1}; phys is in bp.
+    """
+    if phys.size == 0:
+        raise ValueError("no sites to decode")
+    if np.any(np.diff(phys) < 0):
+        site = int(np.argmax(np.diff(phys) < 0)) + 1
+        raise ValueError(
+            "sites must be in increasing physical position, but "
+            f"site {site} is at {phys[site]} bp after {phys[site - 1]} bp")
+    if phys[0] < 0 or phys[-1] > np.iinfo(np.int32).max:
+        raise ValueError("physical positions must fit in a 32-bit integer")
+
+    map_phys, map_cm = _read_genetic_map(map_file)
+    cm = np.interp(phys.astype(np.float64), map_phys.astype(np.float64),
+                   map_cm)
+    # Round to float32 before dividing, as the file reader does, so that both
+    # paths give identical genetic positions.
+    morgans = cm.astype(np.float32) / np.float32(100.0)
+
+    return ASMC.from_arrays(
+        genotypes=geno, physical_positions=phys.astype(np.int32),
+        genetic_positions=morgans, dq_file=str(dq_file),
+        use_ancestral=use_ancestral, skip_csfs_distance=skip_csfs_distance,
+        decoding_mode=decoding_mode,
+    )
+
+
+def _read_pvar_positions(pvar: pathlib.Path) -> np.ndarray:
+    """Read the POS column of a .pvar file.
+
+    With no '#CHROM' header line, PLINK 2 reads the columns in .bim order
+    (CHROM, ID, CM, POS, ...), so POS is the fourth column.
+    """
+    positions = []
+    pos_column = None
+    with open(pvar) as f:
+        for line_number, line in enumerate(f, start=1):
+            if line.startswith("##"):
+                continue
+            if line.startswith("#"):
+                header = line[1:].split()
+                if "POS" not in header:
+                    raise ValueError(f"{pvar}: header line has no POS column")
+                pos_column = header.index("POS")
+                continue
+            parts = line.split()
+            if not parts:
+                continue
+            if pos_column is None:
+                pos_column = 3
+            try:
+                positions.append(int(parts[pos_column]))
+            except (IndexError, ValueError):
+                raise ValueError(
+                    f"{pvar}, line {line_number}: cannot read a position "
+                    f"from {line.strip()!r}") from None
+    return np.asarray(positions, dtype=np.int64)
 
 
 def from_pgen(pgen: PathLike, map_file: PathLike, dq_file: PathLike,
@@ -90,83 +159,63 @@ def from_pgen(pgen: PathLike, map_file: PathLike, dq_file: PathLike,
               variant_indices: Optional[np.ndarray] = None) -> ASMC:
     """Construct ASMC from a PLINK 2 (.pgen / .pvar / .psam) trio.
 
-    Reads physical positions from the .pvar sidecar, interpolates cM at
-    those positions from ``map_file``, then loads genotypes via pgenlib.
-    Returns a ready-to-decode ASMC object.
+    pgen: path to the .pgen file; the .pvar is found beside it.
+    map_file: PLINK-style genetic map (chromosome, SNP ID, cM, bp).
+    dq_file: ASMC decoding quantities.
+    variant_indices: optional increasing .pgen variant indices to keep
+        (for example, to drop singletons).
 
-    pgen — path to the .pgen file (sidecars discovered as .pvar / .psam).
-    map_file — 4-col PLINK-style genetic map (chrom, snp_id, cM, bp).
-    dq_file — ASMC decoding-quantities file.
-    variant_indices — optional 1-D int array of pgen variant rows to keep
-        (e.g. drop singletons / restrict to common variants).
+    Every kept variant must be biallelic, with no missing calls and no
+    unphased heterozygous calls.
     """
-    try:
-        import pgenlib
-    except ImportError as e:
-        raise ImportError(
-            "from_pgen needs the 'pgenlib' Python package; "
-            "install via PLINK 2 source or `pip install Pgenlib`") from e
+    pgenlib = _import_optional("pgenlib", "Pgenlib", "from_pgen")
 
     pgen = pathlib.Path(pgen)
     pvar = pgen.with_suffix(".pvar")
     if not pvar.exists():
-        raise FileNotFoundError(f"missing .pvar sidecar for {pgen}")
+        raise FileNotFoundError(f"missing .pvar beside {pgen}")
+    pvar_phys = _read_pvar_positions(pvar)
 
-    # Read .pvar — first non-header line onwards. PLINK 2 header is
-    # ``##`` lines plus a single ``#CHROM POS ID REF ALT`` row.
-    pvar_phys = []
-    with open(pvar) as f:
-        for line in f:
-            if line.startswith("##"):
-                continue
-            if line.startswith("#"):
-                continue  # column header
-            parts = line.split()
-            if len(parts) < 2:
-                continue
-            try:
-                pvar_phys.append(int(parts[1]))
-            except ValueError:
-                continue
-    pvar_phys = np.asarray(pvar_phys, dtype=np.int64)
-
-    if variant_indices is not None:
-        variant_indices = np.asarray(variant_indices, dtype=np.int64)
-        if variant_indices.min() < 0 or variant_indices.max() >= len(pvar_phys):
-            raise ValueError("variant_indices out of bounds for .pvar")
-        keep_phys = pvar_phys[variant_indices]
-    else:
-        keep_phys = pvar_phys
+    if variant_indices is None:
         variant_indices = np.arange(len(pvar_phys), dtype=np.int64)
+    else:
+        variant_indices = np.asarray(variant_indices, dtype=np.int64)
+        if variant_indices.ndim != 1:
+            raise ValueError("variant_indices must be one-dimensional")
+        if variant_indices.size and (variant_indices[0] < 0 or
+                                     variant_indices[-1] >= len(pvar_phys)):
+            raise ValueError("variant_indices out of range for the .pvar")
+        if np.any(np.diff(variant_indices) <= 0):
+            raise ValueError("variant_indices must be strictly increasing")
+    phys = pvar_phys[variant_indices]
 
-    # Read genotypes via pgenlib: (sites, 2*samples) int32 in {0, 1}
-    # (haploid alleles for phased data).
-    reader = pgenlib.PgenReader(str(pgen).encode())
-    n_samples = reader.get_raw_sample_ct()
-    n_haps = 2 * n_samples
-    geno = np.empty((len(variant_indices), n_haps), dtype=np.int32)
-    reader.read_alleles_list(variant_indices.astype(np.uint32), geno)
-    reader.close()
+    with pgenlib.PgenReader(bytes(pgen)) as reader:
+        if reader.get_variant_ct() != len(pvar_phys):
+            raise ValueError(
+                f"{pgen} has {reader.get_variant_ct()} variants but {pvar} "
+                f"has {len(pvar_phys)}")
+        n_samples = reader.get_raw_sample_ct()
+        alleles = np.empty((len(variant_indices), 2 * n_samples),
+                           dtype=np.int32)
+        phased = np.empty((len(variant_indices), n_samples), dtype=np.uint8)
+        reader.read_alleles_and_phasepresent_list(
+            variant_indices.astype(np.uint32), alleles, phased)
 
-    # ASMC's from_arrays wants int8 in {0, 1}.
-    geno = geno.astype(np.int8, copy=False)
-    if geno.min() < 0:
-        raise ValueError("pgen contains missing alleles (-1); ASMC needs hard calls")
-    if geno.max() > 1:
-        raise ValueError("pgen contains multi-allelic sites; ASMC needs biallelic")
+    if alleles.size and alleles.min() < 0:
+        raise ValueError(f"{pgen} has missing calls; ASMC needs hard calls")
+    if alleles.size and alleles.max() > 1:
+        raise ValueError(f"{pgen} has multiallelic variants; ASMC needs "
+                         "biallelic variants")
+    unphased = (alleles[:, 0::2] != alleles[:, 1::2]) & (phased == 0)
+    if unphased.any():
+        row = int(np.argmax(unphased.any(axis=1)))
+        raise ValueError(
+            f"{pgen} has an unphased heterozygous call at variant "
+            f"{variant_indices[row]} ({phys[row]} bp); ASMC needs phased "
+            "haplotypes")
 
-    map_phys, map_cm = _read_genetic_map(map_file)
-    cm_at_sites = _interp_cm(keep_phys, map_phys, map_cm)
-    morgans = (cm_at_sites / 100.0).astype(np.float32)
-    phys = keep_phys.astype(np.int32)
-
-    asmc = ASMC.from_arrays(
-        genotypes=geno, physical_positions=phys, genetic_positions=morgans,
-        dq_file=str(dq_file), use_ancestral=use_ancestral,
-        skip_csfs_distance=skip_csfs_distance, decoding_mode=decoding_mode,
-    )
-    asmc.set_store_per_pair_posterior_mean()
-    return asmc
+    return _from_genotypes(alleles.astype(np.int8), phys, map_file, dq_file,
+                           use_ancestral, skip_csfs_distance, decoding_mode)
 
 
 def from_vcf(vcf: PathLike, map_file: PathLike, dq_file: PathLike,
@@ -174,72 +223,78 @@ def from_vcf(vcf: PathLike, map_file: PathLike, dq_file: PathLike,
              skip_csfs_distance: float = 0.0,
              use_ancestral: bool = False,
              region: Optional[str] = None) -> ASMC:
-    """Construct ASMC from a phased VCF / BCF via cyvcf2.
+    """Construct ASMC from a phased VCF or BCF, read with cyvcf2.
 
-    Reads only biallelic SNPs with no missing alleles. Phased genotypes
-    are unpacked into (sites, 2*samples) int8 in {0, 1}. cM positions
-    are interpolated from ``map_file`` (PLINK-style, cM column).
+    vcf: path to the VCF or BCF; region needs it to be indexed.
+    map_file: PLINK-style genetic map (chromosome, SNP ID, cM, bp).
+    dq_file: ASMC decoding quantities.
+    region: optional region to read, such as "chr2" or "chr2:1-5000000".
+
+    Sites that are not biallelic SNPs (indels, symbolic or multiple ALT
+    alleles) and sites with a missing call are skipped, with a warning.
+    The sites read must all be on one chromosome. Genotypes must be
+    diploid, and heterozygous calls must be phased.
     """
-    try:
-        from cyvcf2 import VCF
-    except ImportError as e:
-        raise ImportError("from_vcf needs cyvcf2; `pip install cyvcf2`") from e
+    cyvcf2 = _import_optional("cyvcf2", "cyvcf2", "from_vcf")
 
-    vcf_obj = VCF(str(vcf))
-    if region:
-        records = vcf_obj(region)
-    else:
-        records = vcf_obj
-    n_samples = len(vcf_obj.samples)
-    n_haps = 2 * n_samples
-    phys_list = []
+    reader = cyvcf2.VCF(str(vcf))
+    records = reader(region) if region else reader
+    n_haps = 2 * len(reader.samples)
+    chromosomes = set()
+    positions = []
     rows = []
     skipped = 0
     for v in records:
-        if v.num_called != n_samples:
-            skipped += 1; continue
-        if len(v.ALT) != 1:
-            skipped += 1; continue
-        # cyvcf2 .genotypes returns [allele1, allele2, phased] per sample.
-        gts = v.genotypes  # list of [a, b, phased]
-        haps = np.empty(n_haps, dtype=np.int8)
-        bad = False
-        for i, (a, b, _) in enumerate(gts):
-            if a < 0 or b < 0 or a > 1 or b > 1:
-                bad = True; break
-            haps[2 * i] = a
-            haps[2 * i + 1] = b
-        if bad:
-            skipped += 1; continue
-        phys_list.append(v.start + 1)  # cyvcf2 is 0-based; convert to 1-based bp
-        rows.append(haps)
-    geno = np.stack(rows, axis=0)  # (sites, 2*samples)
-    phys = np.asarray(phys_list, dtype=np.int32)
+        if (len(v.REF) != 1 or len(v.ALT) != 1 or len(v.ALT[0]) != 1
+                or v.ALT[0] in ("*", ".")):
+            skipped += 1
+            continue
+        gt = v.genotype.array()  # (samples, 3): two alleles, then phased
+        if gt.shape[1] != 3:
+            raise ValueError(f"{vcf}: {v.CHROM}:{v.POS} is not diploid")
+        alleles = gt[:, :2]
+        if (alleles < 0).any():
+            skipped += 1
+            continue
+        if np.any((alleles[:, 0] != alleles[:, 1]) & (gt[:, 2] == 0)):
+            raise ValueError(
+                f"{vcf}: unphased heterozygous call at {v.CHROM}:{v.POS}; "
+                "ASMC needs phased haplotypes")
+        chromosomes.add(v.CHROM)
+        positions.append(v.POS)
+        rows.append(alleles.reshape(-1).astype(np.int8))
+    reader.close()
 
-    map_phys, map_cm = _read_genetic_map(map_file)
-    cm_at_sites = _interp_cm(phys, map_phys, map_cm)
-    morgans = (cm_at_sites / 100.0).astype(np.float32)
+    if len(chromosomes) > 1:
+        raise ValueError(
+            f"{vcf}: sites are on several chromosomes "
+            f"({', '.join(sorted(chromosomes))}); choose one with region")
+    if skipped:
+        warnings.warn(f"from_vcf skipped {skipped} sites that are not "
+                      "biallelic SNPs or have a missing call")
 
-    asmc = ASMC.from_arrays(
-        genotypes=geno, physical_positions=phys, genetic_positions=morgans,
-        dq_file=str(dq_file), use_ancestral=use_ancestral,
-        skip_csfs_distance=skip_csfs_distance, decoding_mode=decoding_mode,
-    )
-    asmc.set_store_per_pair_posterior_mean()
-    return asmc
+    geno = (np.stack(rows) if rows
+            else np.empty((0, n_haps), dtype=np.int8))
+    phys = np.asarray(positions, dtype=np.int64)
+    return _from_genotypes(geno, phys, map_file, dq_file, use_ancestral,
+                           skip_csfs_distance, decoding_mode)
 
 
 def from_haps(haps_root: PathLike, dq_file: PathLike,
               *, decoding_mode: str = "array",
               skip_csfs_distance: float = 0.0,
               use_ancestral: bool = False) -> ASMC:
-    """Construct ASMC from an Eagle/SHAPEIT .hap[.gz] / .sample / .map trio.
+    """Construct ASMC from an Eagle / SHAPEIT .hap[.gz] / .samples / .map set.
 
-    This wraps the legacy file-based ASMC constructor for symmetry with the
-    other ``from_*`` helpers; the underlying implementation reads the .hap
-    via the C++ side, no in-memory unpack.
+    Uses the file-based reader with the same parameters as
+    ``ASMC(haps_root, dq_file)``, adding the options given here.
     """
     haps_root = str(haps_root)
-    asmc = ASMC(haps_root, str(dq_file), "", decoding_mode)
-    asmc.set_store_per_pair_posterior_mean()
-    return asmc
+    params = DecodingParams(
+        in_file_root=haps_root, dq_file=str(dq_file),
+        out_file_root=haps_root, decoding_mode_string=decoding_mode,
+        using_CSFS=False,  # turned on unless skip_csfs_distance is infinite
+        use_ancestral=use_ancestral, skip_CSFS_distance=skip_csfs_distance,
+        do_posterior_sums=True, do_major_minor_posterior_sums=True,
+        do_per_pair_MAP=True)
+    return ASMC(params)
