@@ -276,5 +276,25 @@ class TestDecodePairsParallel(unittest.TestCase):
         np.testing.assert_allclose(seq_means, par_means, rtol=1e-5)
 
 
+class TestClusterChunk(unittest.TestCase):
+    """Test the Python interface of cluster_chunk; test_cluster.cpp checks the trees."""
+
+    def test_cluster_chunk_returns_arrays(self):
+        """cluster_chunk should return a dict of counts and arrays sized for the chunk."""
+        _, phys, gen, geno, _, _ = load_reference()
+        num_haps = 20
+        # Without the CSFS, which needs at least 300 haplotypes
+        asmc = ASMC.from_arrays(geno[:, :num_haps].copy(), phys, gen, dq_file, skip_csfs_distance=float('inf'))
+
+        result = asmc.cluster_chunk(from_=100, to=104)
+
+        self.assertEqual(result['num_haps'], num_haps)
+        self.assertEqual(result['num_sites'], 4)
+        self.assertEqual(result['site_boundaries'].shape, (5,))
+        self.assertEqual(result['node_time'].shape, (4 * (num_haps - 1),))
+        for key in ('edge_left', 'edge_right', 'edge_parent', 'edge_child'):
+            self.assertEqual(result[key].shape, (8 * (num_haps - 1),))
+
+
 if __name__ == "__main__":
     unittest.main()
