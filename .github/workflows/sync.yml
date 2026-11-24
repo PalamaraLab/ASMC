@@ -25,11 +25,16 @@ jobs:
         run: |
           remote_repo="https://fcooper8472:${DEPLOY_ACCESS_TOKEN}@github.com/PalamaraLab/ASMC.git"
           git fetch "${remote_repo}" main
-          if ! git diff --quiet HEAD FETCH_HEAD; then
-            git push "${remote_repo}" HEAD:main --follow-tags --force
-            echo "Changes detected and pushed to public repo."
+          # Push only fast-forwards. A run that starts from a stale commit
+          # (or the echo of a sync push) must never overwrite newer work.
+          if git merge-base --is-ancestor HEAD FETCH_HEAD; then
+            echo "Public main already contains this commit. No push needed."
+          elif git merge-base --is-ancestor FETCH_HEAD HEAD; then
+            git push "${remote_repo}" HEAD:main --follow-tags
+            echo "Fast-forwarded public main."
           else
-            echo "No changes detected. No push needed."
+            echo "::error::Private and public main have diverged. Not pushing; reconcile them by hand."
+            exit 1
           fi
 
   public-to-private:
@@ -48,9 +53,14 @@ jobs:
         run: |
           remote_repo="https://fcooper8472:${DEPLOY_ACCESS_TOKEN}@github.com/PalamaraLab/ASMC_dev.git"
           git fetch "${remote_repo}" main
-          if ! git diff --quiet HEAD FETCH_HEAD; then
-            git push "${remote_repo}" HEAD:main --follow-tags --force
-            echo "Changes detected and pushed to private repo."
+          # Push only fast-forwards. A run that starts from a stale commit
+          # (or the echo of a sync push) must never overwrite newer work.
+          if git merge-base --is-ancestor HEAD FETCH_HEAD; then
+            echo "Private main already contains this commit. No push needed."
+          elif git merge-base --is-ancestor FETCH_HEAD HEAD; then
+            git push "${remote_repo}" HEAD:main --follow-tags
+            echo "Fast-forwarded private main."
           else
-            echo "No changes detected. No push needed."
+            echo "::error::Public and private main have diverged. Not pushing; reconcile them by hand."
+            exit 1
           fi
