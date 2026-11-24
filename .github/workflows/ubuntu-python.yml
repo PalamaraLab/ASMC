@@ -70,7 +70,7 @@ jobs:
       - name: install python bindings
         run: |
           python -m pip install --upgrade pip setuptools wheel ninja
-          python -m pip install .
+          python -m pip install ".[io]"
 
       - name: python unit tests
         run: |

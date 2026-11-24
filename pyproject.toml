@@ -34,6 +34,12 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 
+[project.optional-dependencies]
+io = [
+    'Pgenlib',
+    'cyvcf2',
+]
+
 [tool.scikit-build]
 minimum-version = "build-system.requires"
 build.verbose = true
